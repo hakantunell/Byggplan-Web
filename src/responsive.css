@@ -1,0 +1,95 @@
+/* Responsive layout layers for ByggPlan.
+   The application changes structure according to available width rather than device name. */
+
+/* Large tablets and desktop: persistent project tree + detail panel */
+@media (min-width: 1101px) {
+  main { max-width: 1440px; }
+  .grid { grid-template-columns: minmax(420px, .85fr) minmax(560px, 1.15fr); gap: 24px; }
+  .hierarchy { max-height: calc(100vh - 210px); overflow: auto; position: sticky; top: 92px; align-self: start; }
+  aside { min-height: 620px; }
+  .hero { display: grid; grid-template-columns: 1fr auto; align-items: end; }
+  .hero small { grid-column: 1 / -1; }
+}
+
+/* Tablet: touch-friendly split view. Works in portrait, landscape and split-screen. */
+@media (min-width: 701px) and (max-width: 1100px) {
+  header { height: 68px; padding: 0 24px; }
+  main { max-width: none; padding: 22px 24px 48px; }
+  .hero { padding: 24px; border-radius: 18px; }
+  .hero h1 { font-size: clamp(28px, 4.5vw, 40px); }
+  .grid { grid-template-columns: minmax(300px, .82fr) minmax(390px, 1.18fr); gap: 16px; }
+  .panel h2, aside { padding: 18px; }
+  .hierarchy { max-height: calc(100vh - 190px); overflow-y: auto; position: sticky; top: 84px; align-self: start; }
+  .task { min-height: 58px; padding: 14px 10px; }
+  .detailTabs { margin-left: -18px; margin-right: -18px; position: sticky; top: 68px; z-index: 8; }
+  .detailTabs button { min-height: 48px; }
+  .requirement { min-height: 74px; align-items: center; }
+  .requirement input[type='checkbox'] { width: 24px; height: 24px; }
+  .requirement input:not([type='checkbox']) { min-height: 44px; font-size: 17px; }
+  .requirement button, .technicalShortcut, .complete { min-height: 46px; }
+  .technicalCard { padding: 16px; }
+}
+
+/* Phone: one task-focused column with large controls and sticky tabs/actions. */
+@media (max-width: 700px) {
+  :root { background: #f4f5f2; }
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  header { height: 62px; padding: 0 16px; }
+  header strong { font-size: 19px; }
+  header span { max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .headerActions { gap: 8px; }
+  .headerActions b { font-size: 10px; }
+  .headerActions button { display: none; }
+  main { padding: 12px 12px calc(32px + env(safe-area-inset-bottom)); }
+  .hero { padding: 18px; border-radius: 16px; margin-bottom: 12px; }
+  .hero p { margin: 0 0 5px; }
+  .hero h1 { font-size: 27px; line-height: 1.08; margin: 4px 0 12px; }
+  .hero small { display: block; line-height: 1.45; }
+  .grid { display: flex; flex-direction: column; gap: 12px; margin-top: 0; }
+  .panel, aside { border-radius: 15px; }
+  .panel h2, aside { padding: 16px; }
+  .hierarchy > h2 { font-size: 18px; }
+  .areaGroup { padding-top: 12px; }
+  .areaGroup > h3 { padding: 0 14px 8px; font-size: 16px; }
+  .sectionGroup { padding: 0 8px 9px; }
+  .sectionGroup > h4 { margin: 7px 6px; }
+  .task { min-height: 62px; padding: 13px 8px; border-radius: 10px; }
+  .task.selected { box-shadow: inset 3px 0 #174c3c; }
+  .task span b { font-size: 15px; line-height: 1.25; }
+  .task small { font-size: 12px; }
+  aside > p:first-child { line-height: 1.45; margin-bottom: 8px; }
+  aside > h2 { font-size: 25px; line-height: 1.12; margin: 7px 0 10px; }
+  aside > p { line-height: 1.5; }
+  .detailTabs { margin: 18px -16px 8px; position: sticky; top: 62px; z-index: 12; box-shadow: 0 6px 12px rgba(22,35,31,.06); }
+  .detailTabs button { min-height: 50px; padding: 8px 4px; font-size: 11px; }
+  .detailTabs span { display: none; }
+  .requirement { grid-template-columns: 1fr; gap: 8px; padding: 16px 0; }
+  .requirement > strong { justify-self: start; order: -1; padding: 4px 8px; border-radius: 12px; background: #fae7e2; }
+  .requirement > strong.done { background: #e0f1e7; }
+  .requirement > div { gap: 10px; }
+  .requirement > div > b { font-size: 16px; line-height: 1.35; }
+  .requirement label { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  .requirement input[type='checkbox'] { width: 28px; height: 28px; flex: 0 0 auto; }
+  .requirement input:not([type='checkbox']) { width: 100%; max-width: 180px; min-height: 48px; border: 1px solid #b9c8c0; border-radius: 10px; font-size: 18px; }
+  .requirement button { width: 100%; min-height: 48px; }
+  .technicalShortcut, .complete { min-height: 52px; border-radius: 12px; font-size: 16px; }
+  .complete { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 10; box-shadow: 0 8px 24px rgba(23,76,60,.24); }
+  .technicalHeader { align-items: center; }
+  .technicalHeader > div { min-width: 0; }
+  .technicalHeader button { min-height: 42px; }
+  .technicalCard { grid-template-columns: 38px 1fr; padding: 14px 12px; }
+  .technicalMeta { flex-wrap: wrap; }
+  .technicalCard h4 { font-size: 16px; }
+  .technicalCard p, .technicalCard ul { font-size: 14px; }
+  .fileIcon { width: 36px; height: 36px; }
+  .projectChooser { min-height: 100dvh; padding: 28px 14px; align-content: center; }
+  .projectChooser section > button { min-height: 88px; padding: 16px; }
+}
+
+/* Very narrow phones */
+@media (max-width: 380px) {
+  header span { max-width: 170px; }
+  .hero h1 { font-size: 24px; }
+  .detailTabs button { font-size: 10px; }
+  aside > h2 { font-size: 22px; }
+}
