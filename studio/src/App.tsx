@@ -53,22 +53,24 @@ export function App() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    void loadProjects();
+    void loadProjects(false);
   }, []);
 
   useEffect(() => {
     if (projectId) void loadStructure();
   }, [projectId]);
 
-  async function loadProjects() {
+  async function loadProjects(preserveSelection: boolean) {
     try {
       const response = await fetch(`${API_BASE}/api/projects`);
       if (!response.ok) throw new Error('Kunde inte hämta projekt.');
       const data = await response.json() as { projects: Project[] };
       setProjects(data.projects);
-      const first = data.projects[0]?.id || '';
-      setProjectId(first);
-      if (first) setSelection({ kind: 'project', id: first });
+      if (!preserveSelection) {
+        const first = data.projects[0]?.id || '';
+        setProjectId(first);
+        if (first) setSelection({ kind: 'project', id: first });
+      }
     } catch (error) {
       console.error(error);
       setState('error');
@@ -89,16 +91,16 @@ export function App() {
     }
   }
 
-  async function api(path: string, method: 'POST' | 'PUT', body: Record<string, unknown>) {
-    setMessage('Sparar…');
+  async function api(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: Record<string, unknown>) {
+    setMessage(method === 'DELETE' ? 'Tar bort…' : 'Sparar…');
     const response = await fetch(`${API_BASE}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined
     });
     const data = await response.json().catch(() => ({})) as { ok?: boolean; id?: string; error?: string };
     if (!response.ok) throw new Error(data.error || 'Åtgärden misslyckades.');
-    setMessage('Sparat');
+    setMessage(method === 'DELETE' ? 'Borttaget' : 'Sparat');
     window.setTimeout(() => setMessage(''), 1600);
     return data;
   }
@@ -130,9 +132,8 @@ export function App() {
   });
 
   async function createChild() {
-    if (!selection) return;
-    const labels = { project: 'arbetsområde', area: 'arbetsavsnitt', section: 'moment', task: 'aktivitet', activity: '' } as const;
-    if (selection.kind === 'activity') return;
+    if (!selection || selection.kind === 'activity') return;
+    const labels = { project: 'arbetsområde', area: 'arbetsavsnitt', section: 'moment', task: 'aktivitet' } as const;
     const name = window.prompt(`Namn på nytt ${labels[selection.kind]}:`)?.trim();
     if (!name) return;
     try {
@@ -155,7 +156,7 @@ export function App() {
         setExpanded(current => new Set(current).add(`task:${selection.id}`));
       }
       await loadStructure(next);
-      await loadProjects();
+      await loadProjects(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte skapa objektet.');
     }
@@ -163,14 +164,39 @@ export function App() {
 
   async function saveSelection(form: { name: string; description: string; activityType: string }) {
     if (!selection || selection.kind === 'project') return;
+    if (selection.kind === 'area') await api(`/api/studio/work-areas/${selection.id}`, 'PUT', { name: form.name });
+    if (selection.kind === 'section') await api(`/api/studio/work-sections/${selection.id}`, 'PUT', { name: form.name });
+    if (selection.kind === 'task') await api(`/api/studio/tasks/${selection.id}`, 'PUT', { title: form.name, description: form.description });
+    if (selection.kind === 'activity') await api(`/api/studio/activities/${selection.id}`, 'PUT', { title: form.name, description: form.description, activityType: form.activityType });
+    await loadStructure(selection);
+  }
+
+  async function deleteSelection() {
+    if (!selection || selection.kind === 'project') return;
+    const object = selectedObject;
+    const name = object?.title || object?.name || selectionLabel(selection);
+    if (!window.confirm(`Ta bort ${selectionLabel(selection).toLowerCase()} ”${name}”?`)) return;
     try {
-      if (selection.kind === 'area') await api(`/api/studio/work-areas/${selection.id}`, 'PUT', { name: form.name });
-      if (selection.kind === 'section') await api(`/api/studio/work-sections/${selection.id}`, 'PUT', { name: form.name });
-      if (selection.kind === 'task') await api(`/api/studio/tasks/${selection.id}`, 'PUT', { title: form.name, description: form.description });
-      if (selection.kind === 'activity') await api(`/api/studio/activities/${selection.id}`, 'PUT', { title: form.name, description: form.description, activityType: form.activityType });
-      await loadStructure(selection);
+      let path = '';
+      let parent: Selection = { kind: 'project', id: projectId };
+      if (selection.kind === 'area') path = `/api/studio/work-areas/${selection.id}`;
+      if (selection.kind === 'section') {
+        path = `/api/studio/work-sections/${selection.id}`;
+        parent = { kind: 'area', id: object.work_area_id };
+      }
+      if (selection.kind === 'task') {
+        path = `/api/studio/tasks/${selection.id}`;
+        parent = { kind: 'section', id: object.work_section_id };
+      }
+      if (selection.kind === 'activity') {
+        path = `/api/studio/activities/${selection.id}`;
+        parent = { kind: 'task', id: object.task_id };
+      }
+      await api(path, 'DELETE');
+      await loadStructure(parent);
+      await loadProjects(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Kunde inte spara.');
+      setMessage(error instanceof Error ? error.message : 'Kunde inte ta bort objektet.');
     }
   }
 
@@ -222,7 +248,7 @@ export function App() {
 
     <main className="workspace">
       <div className="workspaceHeader"><div><small>INSPEKTÖR</small><h1>{selectionLabel(selection)}</h1></div><div className="headerActions"><button className="primary" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>{createLabel(selection)}</button><button disabled>Förhandsgranska ↗</button></div></div>
-      <Inspector key={`${selection?.kind}:${selection?.id}:${JSON.stringify(selectedObject)}`} selection={selection} value={selectedObject} structure={structure} project={currentProject} onSave={saveSelection} />
+      <Inspector selection={selection} value={selectedObject} structure={structure} project={currentProject} onSave={saveSelection} onDelete={deleteSelection} />
     </main>
   </div>;
 }
@@ -234,11 +260,18 @@ function TreeRow({ depth, icon, label, open, selected, badge, onToggle, onSelect
   </div>;
 }
 
-function Inspector({ selection, value, structure, project, onSave }: { selection: Selection | null; value: any; structure: Structure; project?: Project; onSave: (form: { name: string; description: string; activityType: string }) => Promise<void> }) {
-  const [name, setName] = useState(value?.title || value?.name || '');
-  const [description, setDescription] = useState(value?.description || '');
-  const [activityType, setActivityType] = useState(value?.activity_type || 'work');
+function Inspector({ selection, value, structure, project, onSave, onDelete }: { selection: Selection | null; value: any; structure: Structure; project?: Project; onSave: (form: { name: string; description: string; activityType: string }) => Promise<void>; onDelete: () => Promise<void> }) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [activityType, setActivityType] = useState('work');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(value?.title || value?.name || '');
+    setDescription(value?.description || '');
+    setActivityType(value?.activity_type || 'work');
+    setSaving(false);
+  }, [selection?.kind, selection?.id, value]);
 
   if (!selection || !value) return <EmptyInspector />;
   if (selection.kind === 'project') {
@@ -253,6 +286,15 @@ function Inspector({ selection, value, structure, project, onSave }: { selection
         ? structure.activities.filter(item => item.task_id === selection.id).length
         : value.documentation_field_count;
 
+  async function save() {
+    setSaving(true);
+    try {
+      await onSave({ name, description, activityType });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <section className="inspectorCard">
     <div className="objectType">{selectionLabel(selection)}</div>
     <label><span>Namn</span><input value={name} onChange={event => setName(event.target.value)} /></label>
@@ -260,7 +302,7 @@ function Inspector({ selection, value, structure, project, onSave }: { selection
     {selection.kind === 'activity' && <label><span>Aktivitetstyp</span><select value={activityType} onChange={event => setActivityType(event.target.value)}><option value="work">Utför</option><option value="documentation">Dokumentera</option><option value="measurement">Mät</option><option value="control">Kontrollera</option><option value="approval">Godkänn</option><option value="wait">Vänta</option></select></label>}
     {selection.kind === 'task' && <div className="propertyRow"><span>Status</span><b>{value.status}</b></div>}
     <div className="propertyRow"><span>{selection.kind === 'activity' ? 'Dokumentationsfält' : 'Underliggande objekt'}</span><b>{childCount}</b></div>
-    <div className="formActions"><button className="primary" disabled={saving || !name.trim()} onClick={() => void (async () => { setSaving(true); await onSave({ name, description, activityType }); setSaving(false); })()}>{saving ? 'Sparar…' : 'Spara ändringar'}</button></div>
+    <div className="formActions"><button className="danger" disabled={saving} onClick={() => void onDelete()}>Ta bort</button><button className="primary" disabled={saving || !name.trim()} onClick={() => void save()}>{saving ? 'Sparar…' : 'Spara ändringar'}</button></div>
   </section>;
 }
 
