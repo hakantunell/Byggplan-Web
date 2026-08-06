@@ -1,8 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { App } from './App';
+import { StudioShell } from './StudioShell';
 import './styles.css';
+import './templates.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><App /></React.StrictMode>
+  <React.StrictMode><StudioShell /></React.StrictMode>
 );
