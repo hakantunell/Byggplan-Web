@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-type ActivityType = 'perform'|'document'|'measurement'|'check'|'approval'|'note'|'choice';
-type Activity = { id:string; title:string; description?:string; type:ActivityType; unit?:string; required:boolean; blocking:boolean; irreversible:boolean; technicalResourceId?:string; done:boolean; value?:string };
-type TechnicalItem = { id:string; title:string; type:'text'|'drawing'|'image'|'document'|'material'; summary:string; revision?:string; details?:string[]; objectKey?:string; externalUrl?:string; sourceLevel?:'project'|'work_area'|'work_section'|'task' };
-type Project = { id:string; name:string; property_designation?:string; status:string; work_area_count:number; work_section_count:number; task_count:number };
-type Task = { id:string; projectId:string; project:string; workAreaId:string; workArea:string; workSectionId:string; workSection:string; title:string; description:string; status:'todo'|'active'|'review'|'done'|'blocked'; assignee?:string; activities:Activity[]; technical:TechnicalItem[] };
+type ActivityType='perform'|'document'|'measurement'|'check'|'approval'|'note'|'choice';
+type Activity={id:string;title:string;description?:string;type:ActivityType;unit?:string;required:boolean;blocking:boolean;irreversible:boolean;technicalResourceId?:string;done:boolean;value?:string};
+type TechnicalItem={id:string;title:string;type:'text'|'drawing'|'image'|'document'|'material';summary:string;revision?:string;details?:string[];objectKey?:string;externalUrl?:string;sourceLevel?:'project'|'work_area'|'work_section'|'task'};
+type Project={id:string;name:string;property_designation?:string;status:string;work_area_count:number;work_section_count:number;task_count:number};
+type Task={id:string;projectId:string;project:string;workAreaId:string;workArea:string;workSectionId:string;workSection:string;title:string;description:string;status:'todo'|'active'|'review'|'done'|'blocked';assignee?:string;activities:Activity[];technical:TechnicalItem[]};
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||'https://api.byggplan.tunell.org').replace(/\/$/,'');
 const labels={todo:'Kan göras',active:'Pågår',review:'Redo för kontroll',done:'Klart',blocked:'Blockerat'};
@@ -43,10 +43,9 @@ export function App(){
       if(!response.ok)throw new Error(`API svarade ${response.status}`);
       const data=await response.json() as {tasks:Task[]};
       setTasks(data.tasks);
-      if(data.tasks[0]&&!openAreas.length){setOpenAreas([data.tasks[0].workAreaId]);setOpenSections([data.tasks[0].workSectionId]);setOpenTasks([data.tasks[0].id]);}
       setApiState('connected');
     }catch(error){console.error(error);setApiState('error');}
-  },[openAreas.length]);
+  },[]);
 
   const loadProjects=useCallback(async()=>{
     if(!navigator.onLine){setApiState('offline');return;}
@@ -54,12 +53,14 @@ export function App(){
       const response=await fetch(`${API_BASE}/api/projects`);
       if(!response.ok)throw new Error(`API svarade ${response.status}`);
       const data=await response.json() as {projects:Project[]};
-      setProjects(data.projects);setProjectId(current=>current??(data.projects.length===1?data.projects[0].id:null));setApiState('connected');
+      setProjects(data.projects);
+      setProjectId(current=>current??(data.projects.length===1?data.projects[0].id:null));
+      setApiState('connected');
     }catch(error){console.error(error);setApiState('error');}
   },[]);
 
   useEffect(()=>{void loadProjects()},[loadProjects]);
-  useEffect(()=>{if(projectId)void loadTasks(projectId)},[projectId,loadTasks]);
+  useEffect(()=>{if(projectId){setOpenAreas([]);setOpenSections([]);setOpenTasks([]);setOpenTechnical([]);void loadTasks(projectId)}},[projectId,loadTasks]);
   useEffect(()=>{const timer=setInterval(()=>{if(document.visibilityState==='visible'&&projectId)void loadTasks(projectId)},60000);return()=>clearInterval(timer)},[projectId,loadTasks]);
 
   const toggle=(setter:React.Dispatch<React.SetStateAction<string[]>>,id:string,single=false)=>setter(current=>current.includes(id)?current.filter(x=>x!==id):(single?[id]:[...current,id]));
@@ -78,34 +79,28 @@ export function App(){
     setTasks(current=>current.map(item=>item.id===task.id?{...item,status:'review'}:item));
   };
 
-  if(projects.length>1&&!projectId)return<ProjectChooser projects={projects} onChoose={id=>setProjectId(id)}/>;
+  if(projects.length>1&&!projectId)return<ProjectChooser projects={projects} onChoose={setProjectId}/>;
   if(apiState==='loading'&&!projectId)return<CenterState text="Hämtar projekt…"/>;
   if(!currentProject)return<CenterState text="Inget projekt kunde öppnas." retry={()=>void loadProjects()}/>;
 
   return <div className="app">
     <header><div><strong>{currentProject.name}</strong><span>ByggPlan</span></div><b className={apiState==='connected'?'online':'offline'}>{apiState==='connected'?'● Online':apiState==='offline'?'Offline':'API-fel'}</b></header>
-    <main><h1>Arbetsområden</h1>
-      <div className="workAreas">{grouped.map(area=>{
-        const areaOpen=openAreas.includes(area.id);const taskCount=area.sections.reduce((sum,section)=>sum+section.tasks.length,0);
-        return <section className={`areaCard ${areaOpen?'open':''}`} key={area.id}>
-          <button className="areaHeader" onClick={()=>toggle(setOpenAreas,area.id,true)}><span className="areaIcon">{areaIcons[area.name]??'▣'}</span><span className="headerText"><b>{area.name}</b><small>{area.sections.length} arbetsavsnitt · {taskCount} moment</small></span><em>{areaOpen?'−':'+'}</em></button>
-          {areaOpen&&<div className="areaBody">{area.sections.map(section=>{
-            const sectionOpen=openSections.includes(section.id);
-            return <section className="sectionCard" key={section.id}>
-              <button className="sectionHeader" onClick={()=>toggle(setOpenSections,section.id)}><span className="sectionIcon">⌖</span><span className="headerText"><b>{section.name}</b><small>{section.tasks.length} moment</small></span><em>{sectionOpen?'−':'+'}</em></button>
-              {sectionOpen&&<div className="sectionBody">{section.tasks.map(task=>{
-                const taskOpen=openTasks.includes(task.id);const completed=task.activities.filter(a=>a.done).length;
-                return <article className={`taskCard ${taskOpen?'open':''}`} key={task.id}>
-                  <button className="taskHeader" onClick={()=>toggle(setOpenTasks,task.id,true)}><i className={task.status}/><span className="headerText"><b>{task.title}</b><small>{completed}/{task.activities.length} aktiviteter klara</small></span><span className={`pill ${task.status}`}>{labels[task.status]}</span><em>{taskOpen?'−':'+'}</em></button>
-                  {taskOpen&&<div className="taskBody">{task.description&&<p className="taskDescription">{task.description}</p>}
-                    <h3>Aktiviteter</h3><div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} technical={task.technical} onUpdate={updateActivity}/>)}</div>
-                    <div className="taskActions"><button className="technicalButton" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📎</span><span><b>Tekniskt underlag</b><small>{task.technical.length} poster</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button><button className="submitButton" onClick={()=>void submit(task)}><span>➤</span><span><b>Skicka för kontroll</b><small>När allt är klart</small></span></button></div>
-                    {openTechnical.includes(task.id)&&<TechnicalList items={task.technical}/>}                  
-                  </div>}
-                </article>})}</div>}
-            </section>})}</div>}
-        </section>})}</div>
-    </main>
+    <main><h1>Arbetsområden</h1><div className="workAreas">{grouped.map(area=>{
+      const areaOpen=openAreas.includes(area.id);const taskCount=area.sections.reduce((sum,section)=>sum+section.tasks.length,0);
+      return <section className={`areaCard ${areaOpen?'open':''}`} key={area.id}>
+        <button className="areaHeader" onClick={()=>toggle(setOpenAreas,area.id,true)}><span className="areaIcon">{areaIcons[area.name]??'▣'}</span><span className="headerText"><b>{area.name}</b><small>{area.sections.length} arbetsavsnitt · {taskCount} moment</small></span><em>{areaOpen?'−':'+'}</em></button>
+        {areaOpen&&<div className="areaBody">{area.sections.map(section=>{
+          const sectionOpen=openSections.includes(section.id);
+          return <section className="sectionCard" key={section.id}>
+            <button className="sectionHeader" onClick={()=>toggle(setOpenSections,section.id)}><span className="sectionIcon">⌖</span><span className="headerText"><b>{section.name}</b><small>{section.tasks.length} moment</small></span><em>{sectionOpen?'−':'+'}</em></button>
+            {sectionOpen&&<div className="sectionBody">{section.tasks.map(task=>{
+              const taskOpen=openTasks.includes(task.id);const completed=task.activities.filter(a=>a.done).length;
+              return <article className={`taskCard ${taskOpen?'open':''}`} key={task.id}>
+                <button className="taskHeader" onClick={()=>toggle(setOpenTasks,task.id,true)}><i className={task.status}/><span className="headerText"><b>{task.title}</b><small>{completed}/{task.activities.length} aktiviteter klara</small></span><span className={`pill ${task.status}`}>{labels[task.status]}</span><em>{taskOpen?'−':'+'}</em></button>
+                {taskOpen&&<div className="taskBody">{task.description&&<p className="taskDescription">{task.description}</p>}<h3>Aktiviteter</h3><div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} technical={task.technical} onUpdate={updateActivity}/>)}</div><div className="taskActions"><button className="technicalButton" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📎</span><span><b>Tekniskt underlag</b><small>{task.technical.length} poster</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button><button className="submitButton" onClick={()=>void submit(task)}><span>➤</span><span><b>Skicka för kontroll</b><small>När allt är klart</small></span></button></div>{openTechnical.includes(task.id)&&<TechnicalList items={task.technical}/>}</div>}
+              </article>})}</div>}
+          </section>})}</div>}
+      </section>})}</div></main>
   </div>;
 }
 
