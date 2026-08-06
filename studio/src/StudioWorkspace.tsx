@@ -2,7 +2,18 @@ import { useState } from 'react';
 import { App } from './App';
 
 type ActivityType = 'work' | 'documentation' | 'measurement' | 'control' | 'approval' | 'wait';
-type PaletteActivity = { title: string; type: ActivityType };
+type ClassificationCategory = 'documentation' | 'control_plan' | 'requirement';
+type ActivityClassification = {
+  category: ClassificationCategory;
+  code: string;
+  label: string;
+  source?: string;
+};
+type PaletteActivity = {
+  title: string;
+  type: ActivityType;
+  classifications?: ActivityClassification[];
+};
 type PaletteTask = { title: string; activities: PaletteActivity[] };
 type PaletteSection = { name: string; tasks: PaletteTask[] };
 type PaletteModule = { id: string; icon: string; name: string; sections: PaletteSection[] };
@@ -17,60 +28,96 @@ type ProjectStructure = {
 type ImportResult = {
   ok?: boolean;
   error?: string;
-  created?: { sections: number; tasks: number; activities: number };
+  created?: { sections: number; tasks: number; activities: number; classifications?: number };
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
+
+const DOC_AUTHORITY: ActivityClassification = { category: 'documentation', code: 'authority', label: 'Myndighetsdokumentation' };
+const DOC_OWN: ActivityClassification = { category: 'documentation', code: 'own', label: 'Egen byggdokumentation' };
+const DOC_KA: ActivityClassification = { category: 'documentation', code: 'ka', label: 'Underlag till KA' };
 
 const MODULES: PaletteModule[] = [
   {
     id: 'electrical', icon: '⚡', name: 'EL-installation', sections: [
       { name: 'Planering och förberedelse', tasks: [{ title: 'Planera elinstallationen', activities: [
-        { title: 'Kontrollera elritning och placeringar', type: 'control' },
+        { title: 'Kontrollera elritning och placeringar', type: 'control', classifications: [
+          { category: 'requirement', code: 'electrical-plan', label: 'Elprojektering' }
+        ] },
         { title: 'Märk ut central, dosor, uttag och strömbrytare', type: 'work' },
-        { title: 'Dokumentera överenskomna ändringar', type: 'documentation' }
+        { title: 'Dokumentera överenskomna ändringar', type: 'documentation', classifications: [DOC_OWN] }
       ] }] },
       { name: 'Elcentral och matning', tasks: [{ title: 'Förbered och montera elcentral', activities: [
         { title: 'Förbered infästning och kabelvägar', type: 'work' },
         { title: 'Montera elcentral', type: 'work' },
-        { title: 'Dokumentera centralens placering', type: 'documentation' }
+        { title: 'Dokumentera centralens placering', type: 'documentation', classifications: [DOC_OWN] }
       ] }] },
       { name: 'Rör, dosor och ledningsvägar', tasks: [{ title: 'Montera rör och dosor', activities: [
         { title: 'Montera apparat- och kopplingsdosor', type: 'work' },
         { title: 'Dra och fixera installationsrör', type: 'work' },
-        { title: 'Fotografera dolda rör och dosor', type: 'documentation' }
+        { title: 'Fotografera dolda rör och dosor', type: 'documentation', classifications: [
+          DOC_OWN,
+          { category: 'requirement', code: 'relationsunderlag', label: 'Relationsunderlag' }
+        ] }
       ] }] }
     ]
   },
   {
     id: 'crawlspace', icon: '🏗', name: 'Torpargrund', sections: [
       { name: 'Utsättning och schakt', tasks: [{ title: 'Sätt ut och schakta för grund', activities: [
-        { title: 'Sätt ut grundens läge och referensnivåer', type: 'measurement' },
-        { title: 'Dokumentera mark och utsättning', type: 'documentation' },
+        { title: 'Sätt ut grundens läge och referensnivåer', type: 'measurement', classifications: [
+          { category: 'control_plan', code: 'KP-GRUND-01', label: 'Utsättning och nivåer' },
+          { category: 'requirement', code: 'building-permit', label: 'Bygglovshandlingar' }
+        ] },
+        { title: 'Dokumentera mark och utsättning', type: 'documentation', classifications: [
+          DOC_AUTHORITY,
+          DOC_OWN,
+          { category: 'control_plan', code: 'KP-GRUND-01', label: 'Utsättning och nivåer' }
+        ] },
         { title: 'Schakta till projekterade nivåer', type: 'work' }
       ] }] },
       { name: 'Sulor och grundmurar', tasks: [{ title: 'Bygg sulor och grundmurar', activities: [
         { title: 'Förbered bärlager och formsättning', type: 'work' },
-        { title: 'Kontrollera armering före gjutning', type: 'control' },
-        { title: 'Dokumentera armering och genomföringar', type: 'documentation' }
+        { title: 'Kontrollera armering före gjutning', type: 'control', classifications: [
+          { category: 'control_plan', code: 'KP-GRUND-03', label: 'Armering före gjutning' },
+          { category: 'requirement', code: 'structural-design', label: 'Konstruktionsunderlag' }
+        ] },
+        { title: 'Dokumentera armering och genomföringar', type: 'documentation', classifications: [
+          DOC_AUTHORITY,
+          DOC_KA,
+          DOC_OWN,
+          { category: 'control_plan', code: 'KP-GRUND-03', label: 'Armering före gjutning' }
+        ] }
       ] }] },
       { name: 'Ventilation och fuktskydd', tasks: [{ title: 'Ordna ventilation och fuktskydd', activities: [
         { title: 'Montera ventiler enligt plan', type: 'work' },
         { title: 'Utför mark- och väggfuktskydd', type: 'work' },
-        { title: 'Dokumentera före återfyllning', type: 'documentation' }
+        { title: 'Dokumentera före återfyllning', type: 'documentation', classifications: [
+          DOC_AUTHORITY,
+          DOC_OWN,
+          { category: 'control_plan', code: 'KP-GRUND-05', label: 'Fuktskydd och dolda delar' }
+        ] }
       ] }] }
     ]
   },
   {
     id: 'log-frame', icon: '🪵', name: 'Timmerstomme', sections: [
       { name: 'Förberedelse', tasks: [{ title: 'Förbered timmer och upplag', activities: [
-        { title: 'Kontrollera dimensioner och märkning', type: 'control' },
+        { title: 'Kontrollera dimensioner och märkning', type: 'control', classifications: [
+          { category: 'control_plan', code: 'KP-STOMME-01', label: 'Material och dimensioner' }
+        ] },
         { title: 'Sortera stockar efter vägg och läge', type: 'work' }
       ] }] },
       { name: 'Timring', tasks: [{ title: 'Timra väggar och knutar', activities: [
         { title: 'Lägg och rikta syllvarv', type: 'work' },
-        { title: 'Kontrollera diagonaler och nivåer', type: 'measurement' },
-        { title: 'Dokumentera kritiska knutar', type: 'documentation' }
+        { title: 'Kontrollera diagonaler och nivåer', type: 'measurement', classifications: [
+          { category: 'control_plan', code: 'KP-STOMME-02', label: 'Geometri och nivåer' }
+        ] },
+        { title: 'Dokumentera kritiska knutar', type: 'documentation', classifications: [
+          DOC_OWN,
+          DOC_KA,
+          { category: 'control_plan', code: 'KP-STOMME-03', label: 'Knutar och infästningar' }
+        ] }
       ] }] }
     ]
   },
@@ -78,13 +125,23 @@ const MODULES: PaletteModule[] = [
     id: 'roof', icon: '🏠', name: 'Tak', sections: [
       { name: 'Takbärverk', tasks: [{ title: 'Montera och kontrollera takbärverk', activities: [
         { title: 'Montera åsar, sparrar eller takstolar', type: 'work' },
-        { title: 'Kontrollera upplag och infästningar', type: 'control' },
-        { title: 'Dokumentera bärverk före inklädnad', type: 'documentation' }
+        { title: 'Kontrollera upplag och infästningar', type: 'control', classifications: [
+          { category: 'control_plan', code: 'KP-TAK-01', label: 'Bärverk och infästningar' },
+          { category: 'requirement', code: 'structural-design', label: 'Konstruktionsunderlag' }
+        ] },
+        { title: 'Dokumentera bärverk före inklädnad', type: 'documentation', classifications: [
+          DOC_AUTHORITY,
+          DOC_KA,
+          DOC_OWN,
+          { category: 'control_plan', code: 'KP-TAK-01', label: 'Bärverk och infästningar' }
+        ] }
       ] }] },
       { name: 'Underlagstak', tasks: [{ title: 'Montera råspont och underlagstäckning', activities: [
         { title: 'Montera råspont', type: 'work' },
         { title: 'Montera underlagstäckning', type: 'work' },
-        { title: 'Kontrollera genomföringar och tätningar', type: 'control' }
+        { title: 'Kontrollera genomföringar och tätningar', type: 'control', classifications: [
+          { category: 'control_plan', code: 'KP-TAK-03', label: 'Täthet och genomföringar' }
+        ] }
       ] }] }
     ]
   }
@@ -97,6 +154,12 @@ const ACTIVITY_ICONS: Record<ActivityType, string> = {
   control: '✓',
   approval: '✍',
   wait: '📝'
+};
+
+const CLASSIFICATION_ICONS: Record<ClassificationCategory, string> = {
+  documentation: '📄',
+  control_plan: '☑',
+  requirement: '§'
 };
 
 export function StudioWorkspace() {
@@ -185,7 +248,7 @@ export function StudioWorkspace() {
 
       const created = result.created;
       setNotice(created
-        ? `Klart: ${created.sections} avsnitt, ${created.tasks} moment och ${created.activities} aktiviteter skapades.`
+        ? `Klart: ${created.sections} avsnitt, ${created.tasks} moment, ${created.activities} aktiviteter och ${created.classifications ?? 0} klassificeringar skapades.`
         : 'Komponenten lades till.');
       setProjectRevision(current => current + 1);
       window.setTimeout(() => setNotice(''), 5000);
@@ -204,7 +267,7 @@ export function StudioWorkspace() {
         <strong>Byggblock</strong>
         <input placeholder="Sök komponenter…" disabled />
       </div>
-      <div className="paletteHint">Expandera för att granska innehållet. Dra en modul till projektet eller ett avsnitt till ett arbetsområde.</div>
+      <div className="paletteHint">Expandera för att granska aktiviteter och klassificeringar. Dra en modul till projektet eller ett avsnitt till ett arbetsområde.</div>
       <div className="paletteList">
         {MODULES.map(module => {
           const moduleKey = `module:${module.id}`;
@@ -237,8 +300,19 @@ export function StudioWorkspace() {
                         </div>
                         {expanded.has(taskKey) && <div className="paletteActivities">
                           {task.activities.map(activity => <div className={`paletteActivity type-${activity.type}`} key={`${activity.title}:${activity.type}`}>
-                            <span className="activityTypeIcon" title={activity.type}>{ACTIVITY_ICONS[activity.type]}</span>
-                            <span>{activity.title}</span>
+                            <div className="paletteActivityTitle">
+                              <span className="activityTypeIcon" title={activity.type}>{ACTIVITY_ICONS[activity.type]}</span>
+                              <span>{activity.title}</span>
+                            </div>
+                            {!!activity.classifications?.length && <div className="classificationChips">
+                              {activity.classifications.map(classification => <span
+                                className={`classificationChip category-${classification.category}`}
+                                key={`${classification.category}:${classification.code}`}
+                                title={`${classification.code} · ${classification.label}`}
+                              >
+                                <b>{CLASSIFICATION_ICONS[classification.category]}</b>{classification.label}
+                              </span>)}
+                            </div>}
                           </div>)}
                         </div>}
                       </div>;
