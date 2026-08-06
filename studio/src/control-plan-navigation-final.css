@@ -1,0 +1,23 @@
+/* Final navigation authority: use the regular Studio rail button only. */
+.rail button:nth-child(2){
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+  cursor:pointer!important;
+}
+.rail button:nth-child(2):disabled{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  pointer-events:auto!important;
+}
+.controlPlanRailButton{
+  display:none!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+}
+body.control-plan-view .rail button:nth-child(2){
+  background:#30443a!important;
+  color:#fff!important;
+}
