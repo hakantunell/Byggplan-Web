@@ -3,11 +3,52 @@ body{overflow-x:hidden}
 
 .studioShell{min-height:100vh;min-width:0}
 
-/* Project view keeps the established project editor. */
-.studioShell.view-project .controlPlanRailButton,
-.studioShell.view-project .studioPrimaryNavigation{display:none!important}
+/* The project editor keeps its existing rail background, but the shared shell owns all menu buttons. */
+.studioShell.view-project .rail>button{visibility:hidden!important;pointer-events:none!important}
 
-/* The control-plan view is a separate application page. Nothing is positioned over ProjectView. */
+.studioPrimaryNavigation{
+  position:fixed;
+  z-index:200;
+  left:0;
+  top:64px;
+  width:68px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  padding-top:8px;
+  box-sizing:border-box;
+}
+
+.studioPrimaryNavigation button{
+  width:60px;
+  min-height:64px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#9dafa5;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  cursor:pointer;
+  font-size:10px;
+  line-height:1.15;
+  padding:7px 3px;
+  box-sizing:border-box;
+}
+
+.studioPrimaryNavigation button:hover:not(:disabled),
+.studioPrimaryNavigation button.active{
+  background:#30443a;
+  color:#fff;
+}
+
+.studioPrimaryNavigation button:disabled{opacity:.38;cursor:not-allowed}
+.studioNavIcon{font-size:20px;line-height:1}
+
+/* The control-plan view is a separate application page. */
 .controlPlanStudioFrame{
   min-height:100vh;
   display:grid;
@@ -86,13 +127,15 @@ body{overflow-x:hidden}
 .controlPlanDocumentMeta{max-width:1000px;margin:0 auto 15px;display:flex;align-items:center;gap:12px;color:#6f7d75;font-size:12px}
 .controlPlanContent>.controlPlanProgress,.controlPlanContent>.controlPlanPoints,.controlPlanContent>.empty{max-width:1000px;margin-left:auto;margin-right:auto}
 
-/* Ensure no legacy overlay can become visible in the new shell. */
+/* Legacy control-plan launchers and overlays are never used by the shell. */
 .studioShell .controlPlanBackdrop,
 .studioShell .controlPlanWindow,
 .studioShell .controlPlanRailButton,
 .studioShell .controlPlanMenuButton{display:none!important}
 
 @media(max-width:900px){
+  .studioPrimaryNavigation{width:60px}
+  .studioPrimaryNavigation button{width:54px}
   .controlPlanStudioFrame{grid-template-columns:60px minmax(0,1fr)}
   .controlPlanPrimaryView{grid-template-columns:1fr}
   .controlPlanListPanel{display:none}
