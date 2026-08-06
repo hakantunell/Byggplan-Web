@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { StudioWorkspace } from './StudioWorkspace';
 import { ControlPlanOverlay } from './ControlPlanOverlay';
+import { ControlPlanRailBridge } from './ControlPlanRailBridge';
 import './styles.css';
 import './palette.css';
 import './classifications.css';
@@ -11,5 +12,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <StudioWorkspace />
     <ControlPlanOverlay />
+    <ControlPlanRailBridge />
   </React.StrictMode>
 );
