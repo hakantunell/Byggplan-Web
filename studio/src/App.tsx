@@ -173,25 +173,49 @@ export function App() {
 
   async function deleteSelection() {
     if (!selection || selection.kind === 'project') return;
-    const object = selectedObject;
-    const name = object?.title || object?.name || selectionLabel(selection);
+
+    let path: string;
+    let parent: Selection;
+    let name: string;
+
+    switch (selection.kind) {
+      case 'area': {
+        const area = structure.areas.find(item => item.id === selection.id);
+        if (!area) return;
+        path = `/api/studio/work-areas/${area.id}`;
+        parent = { kind: 'project', id: projectId };
+        name = area.name;
+        break;
+      }
+      case 'section': {
+        const section = structure.sections.find(item => item.id === selection.id);
+        if (!section) return;
+        path = `/api/studio/work-sections/${section.id}`;
+        parent = { kind: 'area', id: section.work_area_id };
+        name = section.name;
+        break;
+      }
+      case 'task': {
+        const task = structure.tasks.find(item => item.id === selection.id);
+        if (!task) return;
+        path = `/api/studio/tasks/${task.id}`;
+        parent = { kind: 'section', id: task.work_section_id };
+        name = task.title;
+        break;
+      }
+      case 'activity': {
+        const activity = structure.activities.find(item => item.id === selection.id);
+        if (!activity) return;
+        path = `/api/studio/activities/${activity.id}`;
+        parent = { kind: 'task', id: activity.task_id };
+        name = activity.title;
+        break;
+      }
+    }
+
     if (!window.confirm(`Ta bort ${selectionLabel(selection).toLowerCase()} ”${name}”?`)) return;
+
     try {
-      let path = '';
-      let parent: Selection = { kind: 'project', id: projectId };
-      if (selection.kind === 'area') path = `/api/studio/work-areas/${selection.id}`;
-      if (selection.kind === 'section') {
-        path = `/api/studio/work-sections/${selection.id}`;
-        parent = { kind: 'area', id: object.work_area_id };
-      }
-      if (selection.kind === 'task') {
-        path = `/api/studio/tasks/${selection.id}`;
-        parent = { kind: 'section', id: object.work_section_id };
-      }
-      if (selection.kind === 'activity') {
-        path = `/api/studio/activities/${selection.id}`;
-        parent = { kind: 'task', id: object.task_id };
-      }
       await api(path, 'DELETE');
       await loadStructure(parent);
       await loadProjects(true);
