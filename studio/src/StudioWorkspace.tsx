@@ -88,6 +88,7 @@ export function StudioWorkspace() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [dropTarget, setDropTarget] = useState('');
+  const [projectRevision, setProjectRevision] = useState(0);
 
   function toggle(id: string) {
     setExpanded(current => {
@@ -107,14 +108,39 @@ export function StudioWorkspace() {
   }
 
   async function api(path: string, body: Record<string, unknown>): Promise<ApiResult> {
-    const response = await fetch(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await response.json().catch(() => ({})) as ApiResult;
-    if (!response.ok) throw new Error(data.error || 'Åtgärden misslyckades.');
-    return data;
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({})) as ApiResult;
+        if (response.ok) return data;
+        lastError = new Error(data.error || `API-fel (${response.status}).`);
+        if (response.status < 500 && response.status !== 429) throw lastError;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Åtgärden misslyckades.');
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    throw lastError || new Error('Åtgärden misslyckades.');
+  }
+
+  async function loadProjectStructure(projectId: string): Promise<ProjectStructure> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`);
+        if (response.ok) return await response.json() as ProjectStructure;
+        lastError = new Error(`Kunde inte läsa projektstrukturen (${response.status}).`);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Kunde inte läsa projektstrukturen.');
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    throw lastError || new Error('Kunde inte läsa projektstrukturen.');
   }
 
   async function createSectionTree(workAreaId: string, section: PaletteSection) {
@@ -135,7 +161,15 @@ export function StudioWorkspace() {
     if (busy) return;
     const raw = event.dataTransfer.getData('application/x-byggplan-library');
     if (!raw) return;
-    const payload = JSON.parse(raw) as DragPayload;
+
+    let payload: DragPayload;
+    try {
+      payload = JSON.parse(raw) as DragPayload;
+    } catch {
+      setNotice('Det gick inte att läsa det dragna objektet.');
+      return;
+    }
+
     const module = MODULES.find(item => item.id === payload.moduleId);
     const projectId = getProjectId();
     if (!module || !projectId) return;
@@ -144,6 +178,7 @@ export function StudioWorkspace() {
     const targetLabel = targetRow?.querySelector('.nodeLabel')?.textContent?.trim() || '';
 
     setBusy(true);
+    setNotice('Lägger till objektet…');
     try {
       if (payload.kind === 'module') {
         const areaResult = await api('/api/studio/work-areas', { projectId, name: module.name });
@@ -151,9 +186,7 @@ export function StudioWorkspace() {
         for (const section of module.sections) await createSectionTree(areaResult.id, section);
         setNotice(`${module.name} lades till i projektet.`);
       } else {
-        const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`);
-        if (!response.ok) throw new Error('Kunde inte läsa projektstrukturen.');
-        const structure = await response.json() as ProjectStructure;
+        const structure = await loadProjectStructure(projectId);
         const area = structure.areas.find(item => item.name === targetLabel);
         if (!area) throw new Error('Släpp arbetsavsnittet på ett arbetsområde i projektträdet.');
         const section = module.sections.find(item => item.name === payload.sectionName);
@@ -161,7 +194,9 @@ export function StudioWorkspace() {
         await createSectionTree(area.id, section);
         setNotice(`${section.name} lades till under ${area.name}.`);
       }
-      window.setTimeout(() => window.location.reload(), 700);
+
+      setProjectRevision(current => current + 1);
+      window.setTimeout(() => setNotice(''), 3000);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Kunde inte lägga till objektet.');
     } finally {
@@ -190,7 +225,7 @@ export function StudioWorkspace() {
     </aside>
     <div className={`projectDropSurface ${dropTarget ? 'dragActive' : ''}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDropTarget('active'); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropTarget(''); }} onDrop={event => void handleDrop(event)}>
       {dropTarget && <div className="dropOverlay">Släpp i projektträdet</div>}
-      <App />
+      <App key={projectRevision} />
     </div>
   </div>;
 }
