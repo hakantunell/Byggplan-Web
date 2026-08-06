@@ -1,0 +1,25 @@
+.controlPlanRailButton{
+  display:flex!important;
+  position:fixed;
+  z-index:45;
+  left:8px;
+  top:146px;
+  width:60px;
+  border:0;
+  background:transparent;
+  color:#9dafa5;
+  padding:10px 4px;
+  border-radius:10px;
+  flex-direction:column;
+  align-items:center;
+  gap:5px;
+  cursor:pointer;
+  font-size:20px;
+}
+.controlPlanRailButton:hover{
+  background:#30443a;
+  color:#fff;
+}
+.controlPlanRailButton span{
+  font-size:10px;
+}
