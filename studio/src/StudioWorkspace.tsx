@@ -11,9 +11,11 @@ type DragPayload = { kind: 'module'; moduleId: string } | { kind: 'section'; mod
 type ApiResult = { id?: string; error?: string };
 type ProjectStructure = {
   areas: { id: string; name: string }[];
+  sections?: { id: string; work_area_id: string; name: string }[];
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
+const pause = (milliseconds: number) => new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
 
 const MODULES: PaletteModule[] = [
   {
@@ -109,7 +111,7 @@ export function StudioWorkspace() {
 
   async function api(path: string, body: Record<string, unknown>): Promise<ApiResult> {
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
         const response = await fetch(`${API_BASE}${path}`, {
           method: 'POST',
@@ -117,28 +119,31 @@ export function StudioWorkspace() {
           body: JSON.stringify(body)
         });
         const data = await response.json().catch(() => ({})) as ApiResult;
-        if (response.ok) return data;
+        if (response.ok) {
+          await pause(120);
+          return data;
+        }
         lastError = new Error(data.error || `API-fel (${response.status}).`);
         if (response.status < 500 && response.status !== 429) throw lastError;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Åtgärden misslyckades.');
       }
-      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+      await pause(500 * (attempt + 1));
     }
     throw lastError || new Error('Åtgärden misslyckades.');
   }
 
   async function loadProjectStructure(projectId: string): Promise<ProjectStructure> {
     let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
-        const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`);
+        const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
         if (response.ok) return await response.json() as ProjectStructure;
         lastError = new Error(`Kunde inte läsa projektstrukturen (${response.status}).`);
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Kunde inte läsa projektstrukturen.');
       }
-      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+      await pause(500 * (attempt + 1));
     }
     throw lastError || new Error('Kunde inte läsa projektstrukturen.');
   }
@@ -153,6 +158,33 @@ export function StudioWorkspace() {
         await api('/api/studio/activities', { taskId: taskResult.id, title: activity.title, description: '', activityType: activity.type });
       }
     }
+  }
+
+  async function ensureAllModuleSections(projectId: string, workAreaId: string, module: PaletteModule) {
+    for (let verification = 0; verification < 3; verification += 1) {
+      await pause(350);
+      const structure = await loadProjectStructure(projectId);
+      const existingNames = new Set(
+        (structure.sections || [])
+          .filter(section => section.work_area_id === workAreaId)
+          .map(section => section.name.trim().toLocaleLowerCase('sv'))
+      );
+      const missing = module.sections.filter(section => !existingNames.has(section.name.trim().toLocaleLowerCase('sv')));
+      if (missing.length === 0) return;
+      for (const section of missing) {
+        setNotice(`Kompletterar ${section.name}…`);
+        await createSectionTree(workAreaId, section);
+      }
+    }
+
+    const finalStructure = await loadProjectStructure(projectId);
+    const finalNames = new Set(
+      (finalStructure.sections || [])
+        .filter(section => section.work_area_id === workAreaId)
+        .map(section => section.name.trim().toLocaleLowerCase('sv'))
+    );
+    const stillMissing = module.sections.filter(section => !finalNames.has(section.name.trim().toLocaleLowerCase('sv')));
+    if (stillMissing.length > 0) throw new Error(`Importen blev inte komplett. Saknas: ${stillMissing.map(section => section.name).join(', ')}.`);
   }
 
   async function handleDrop(event: React.DragEvent) {
@@ -183,8 +215,14 @@ export function StudioWorkspace() {
       if (payload.kind === 'module') {
         const areaResult = await api('/api/studio/work-areas', { projectId, name: module.name });
         if (!areaResult.id) throw new Error('Kunde inte skapa arbetsområdet.');
-        for (const section of module.sections) await createSectionTree(areaResult.id, section);
-        setNotice(`${module.name} lades till i projektet.`);
+        for (let index = 0; index < module.sections.length; index += 1) {
+          const section = module.sections[index];
+          setNotice(`Lägger till avsnitt ${index + 1} av ${module.sections.length}: ${section.name}…`);
+          await createSectionTree(areaResult.id, section);
+        }
+        setNotice('Verifierar att hela modulen är skapad…');
+        await ensureAllModuleSections(projectId, areaResult.id, module);
+        setNotice(`${module.name} lades till med alla ${module.sections.length} avsnitt.`);
       } else {
         const structure = await loadProjectStructure(projectId);
         const area = structure.areas.find(item => item.name === targetLabel);
@@ -196,9 +234,10 @@ export function StudioWorkspace() {
       }
 
       setProjectRevision(current => current + 1);
-      window.setTimeout(() => setNotice(''), 3000);
+      window.setTimeout(() => setNotice(''), 4000);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Kunde inte lägga till objektet.');
+      setProjectRevision(current => current + 1);
     } finally {
       setBusy(false);
     }
