@@ -40,10 +40,68 @@ type Selection =
   | { kind: 'task'; id: string }
   | { kind: 'activity'; id: string };
 
+type StudioModule = 'project' | 'library';
+
+type LibraryModule = {
+  id: string;
+  icon: string;
+  name: string;
+  description: string;
+  sections: number;
+  tasks: number;
+  activities: number;
+  status: 'utkast' | 'publicerad';
+};
+
 const EMPTY_STRUCTURE: Structure = { areas: [], sections: [], tasks: [], activities: [] };
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
 
+const LIBRARY_MODULES: LibraryModule[] = [
+  {
+    id: 'module-electrical',
+    icon: '⚡',
+    name: 'EL-installation',
+    description: 'Återanvändbar grundstruktur för elcentral, ledningsdragning, uttag, belysning, kontroll och dokumentation.',
+    sections: 5,
+    tasks: 12,
+    activities: 31,
+    status: 'utkast'
+  },
+  {
+    id: 'module-crawlspace',
+    icon: '🏗',
+    name: 'Torpargrund',
+    description: 'Grundläggning med schakt, sulor, grundmurar, ventilation, återfyllning och dokumentation.',
+    sections: 6,
+    tasks: 15,
+    activities: 38,
+    status: 'utkast'
+  },
+  {
+    id: 'module-log-frame',
+    icon: '🪵',
+    name: 'Timmerstomme',
+    description: 'Förberedelse, timring, knutar, dymlingar, öppningar, kontrollmätning och byggdokumentation.',
+    sections: 5,
+    tasks: 14,
+    activities: 36,
+    status: 'utkast'
+  },
+  {
+    id: 'module-roof',
+    icon: '🏠',
+    name: 'Tak',
+    description: 'Takbärverk, råspont, underlagstäckning, plåt, genomföringar, säkerhet och kontroll.',
+    sections: 5,
+    tasks: 13,
+    activities: 34,
+    status: 'utkast'
+  }
+];
+
 export function App() {
+  const [activeModule, setActiveModule] = useState<StudioModule>('project');
+  const [selectedLibraryId, setSelectedLibraryId] = useState(LIBRARY_MODULES[0].id);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
   const [structure, setStructure] = useState<Structure>(EMPTY_STRUCTURE);
@@ -124,6 +182,8 @@ export function App() {
     if (selection.kind === 'task') return structure.tasks.find(item => item.id === selection.id) || null;
     return structure.activities.find(item => item.id === selection.id) || null;
   }, [selection, projects, structure]);
+
+  const selectedLibraryModule = LIBRARY_MODULES.find(item => item.id === selectedLibraryId) ?? LIBRARY_MODULES[0];
 
   const toggle = (key: string) => setExpanded(current => {
     const next = new Set(current);
@@ -228,7 +288,7 @@ export function App() {
 
   return <div className="studio">
     <header className="topbar">
-      <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>Projekteditor</small></div></div>
+      <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>{activeModule === 'project' ? 'Projekteditor' : 'Modulbibliotek'}</small></div></div>
       <select value={projectId} onChange={event => { setProjectId(event.target.value); setSelection({ kind: 'project', id: event.target.value }); }}>
         {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
       </select>
@@ -237,44 +297,58 @@ export function App() {
     </header>
 
     <aside className="rail">
-      <button className="active" title="Projektstruktur">🌳<span>Struktur</span></button>
-      <button disabled title="Bibliotek">📚<span>Bibliotek</span></button>
+      <button className={activeModule === 'project' ? 'active' : ''} title="Projektstruktur" onClick={() => setActiveModule('project')}>🌳<span>Struktur</span></button>
+      <button className={activeModule === 'library' ? 'active' : ''} title="Bibliotek" onClick={() => setActiveModule('library')}>📚<span>Bibliotek</span></button>
       <button disabled title="Kontrollplan">📋<span>Kontrollplan</span></button>
       <button disabled title="Dokument">📄<span>Dokument</span></button>
       <button disabled title="Användare">👥<span>Användare</span></button>
     </aside>
 
-    <aside className="treePanel">
-      <div className="panelHeader"><div><small>PROJEKTSTRUKTUR</small><strong>{currentProject?.name || 'Projekt'}</strong></div><button title="Skapa under markerat objekt" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>＋</button></div>
-      <div className="tree">
-        {state === 'loading' && <p className="muted">Hämtar struktur…</p>}
-        {currentProject && <TreeRow depth={0} icon="🏗" label={currentProject.name} selected={selection?.kind === 'project' && selection.id === currentProject.id} onSelect={() => setSelection({ kind: 'project', id: currentProject.id })} badge={structure.areas.length.toString()} />}
-        {tree.map(area => {
-          const areaKey = `area:${area.id}`;
-          return <div className="treeGroup" key={area.id}>
-            <TreeRow depth={1} icon="⛏" label={area.name} open={expanded.has(areaKey)} selected={selection?.kind === 'area' && selection.id === area.id} onToggle={() => toggle(areaKey)} onSelect={() => setSelection({ kind: 'area', id: area.id })} />
-            {expanded.has(areaKey) && area.sections.map(section => {
-              const sectionKey = `section:${section.id}`;
-              return <div key={section.id}>
-                <TreeRow depth={2} icon="⌖" label={section.name} open={expanded.has(sectionKey)} selected={selection?.kind === 'section' && selection.id === section.id} onToggle={() => toggle(sectionKey)} onSelect={() => setSelection({ kind: 'section', id: section.id })} />
-                {expanded.has(sectionKey) && section.tasks.map(task => {
-                  const taskKey = `task:${task.id}`;
-                  return <div key={task.id}>
-                    <TreeRow depth={3} icon="▣" label={task.title} open={expanded.has(taskKey)} selected={selection?.kind === 'task' && selection.id === task.id} onToggle={() => toggle(taskKey)} onSelect={() => setSelection({ kind: 'task', id: task.id })} badge={task.activities.length.toString()} />
-                    {expanded.has(taskKey) && task.activities.map(activity => <TreeRow key={activity.id} depth={4} icon="○" label={activity.title} selected={selection?.kind === 'activity' && selection.id === activity.id} onSelect={() => setSelection({ kind: 'activity', id: activity.id })} />)}
-                  </div>;
-                })}
-              </div>;
-            })}
-          </div>;
-        })}
-      </div>
-    </aside>
+    {activeModule === 'project' ? <>
+      <aside className="treePanel">
+        <div className="panelHeader"><div><small>PROJEKTSTRUKTUR</small><strong>{currentProject?.name || 'Projekt'}</strong></div><button title="Skapa under markerat objekt" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>＋</button></div>
+        <div className="tree">
+          {state === 'loading' && <p className="muted">Hämtar struktur…</p>}
+          {currentProject && <TreeRow depth={0} icon="🏗" label={currentProject.name} selected={selection?.kind === 'project' && selection.id === currentProject.id} onSelect={() => setSelection({ kind: 'project', id: currentProject.id })} badge={structure.areas.length.toString()} />}
+          {tree.map(area => {
+            const areaKey = `area:${area.id}`;
+            return <div className="treeGroup" key={area.id}>
+              <TreeRow depth={1} icon="⛏" label={area.name} open={expanded.has(areaKey)} selected={selection?.kind === 'area' && selection.id === area.id} onToggle={() => toggle(areaKey)} onSelect={() => setSelection({ kind: 'area', id: area.id })} />
+              {expanded.has(areaKey) && area.sections.map(section => {
+                const sectionKey = `section:${section.id}`;
+                return <div key={section.id}>
+                  <TreeRow depth={2} icon="⌖" label={section.name} open={expanded.has(sectionKey)} selected={selection?.kind === 'section' && selection.id === section.id} onToggle={() => toggle(sectionKey)} onSelect={() => setSelection({ kind: 'section', id: section.id })} />
+                  {expanded.has(sectionKey) && section.tasks.map(task => {
+                    const taskKey = `task:${task.id}`;
+                    return <div key={task.id}>
+                      <TreeRow depth={3} icon="▣" label={task.title} open={expanded.has(taskKey)} selected={selection?.kind === 'task' && selection.id === task.id} onToggle={() => toggle(taskKey)} onSelect={() => setSelection({ kind: 'task', id: task.id })} badge={task.activities.length.toString()} />
+                      {expanded.has(taskKey) && task.activities.map(activity => <TreeRow key={activity.id} depth={4} icon="○" label={activity.title} selected={selection?.kind === 'activity' && selection.id === activity.id} onSelect={() => setSelection({ kind: 'activity', id: activity.id })} />)}
+                    </div>;
+                  })}
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>
+      </aside>
 
-    <main className="workspace">
-      <div className="workspaceHeader"><div><small>INSPEKTÖR</small><h1>{selectionLabel(selection)}</h1></div><div className="headerActions"><button className="primary" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>{createLabel(selection)}</button><button disabled>Förhandsgranska ↗</button></div></div>
-      <Inspector selection={selection} value={selectedObject} structure={structure} project={currentProject} onSave={saveSelection} onDelete={deleteSelection} />
-    </main>
+      <main className="workspace">
+        <div className="workspaceHeader"><div><small>INSPEKTÖR</small><h1>{selectionLabel(selection)}</h1></div><div className="headerActions"><button className="primary" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>{createLabel(selection)}</button><button disabled>Förhandsgranska ↗</button></div></div>
+        <Inspector selection={selection} value={selectedObject} structure={structure} project={currentProject} onSave={saveSelection} onDelete={deleteSelection} />
+      </main>
+    </> : <>
+      <aside className="treePanel">
+        <div className="panelHeader"><div><small>BIBLIOTEK</small><strong>Moduler</strong></div><button title="Ny modul – kommer i nästa steg" disabled>＋</button></div>
+        <div className="tree">
+          {LIBRARY_MODULES.map(item => <TreeRow key={item.id} depth={0} icon={item.icon} label={item.name} selected={selectedLibraryId === item.id} onSelect={() => setSelectedLibraryId(item.id)} badge={item.status === 'publicerad' ? '✓' : 'U'} />)}
+        </div>
+      </aside>
+
+      <main className="workspace">
+        <div className="workspaceHeader"><div><small>MODULBIBLIOTEK</small><h1>{selectedLibraryModule.name}</h1></div><div className="headerActions"><button className="primary" disabled>Lägg till i projekt</button><button disabled>Redigera modul</button></div></div>
+        <LibraryInspector module={selectedLibraryModule} project={currentProject} />
+      </main>
+    </>}
   </div>;
 }
 
@@ -283,6 +357,23 @@ function TreeRow({ depth, icon, label, open, selected, badge, onToggle, onSelect
     {onToggle ? <button onClick={event => { event.stopPropagation(); onToggle(); }}>{open ? '⌄' : '›'}</button> : <span className="spacer" />}
     <span className="nodeIcon">{icon}</span><span className="nodeLabel">{label}</span>{badge && <small className="badge">{badge}</small>}
   </div>;
+}
+
+function LibraryInspector({ module, project }: { module: LibraryModule; project?: Project }) {
+  return <section className="inspectorCard">
+    <div className="objectType">Biblioteksmodul · {module.status}</div>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 22 }}>
+      <span style={{ display: 'grid', placeItems: 'center', width: 64, height: 64, borderRadius: 14, background: '#e8f0ea', fontSize: 30, flex: '0 0 auto' }}>{module.icon}</span>
+      <div><h2 style={{ margin: '2px 0 7px' }}>{module.name}</h2><p style={{ margin: 0, color: '#66756d', lineHeight: 1.55 }}>{module.description}</p></div>
+    </div>
+    <div className="propertyRow"><span>Arbetsavsnitt</span><b>{module.sections}</b></div>
+    <div className="propertyRow"><span>Moment</span><b>{module.tasks}</b></div>
+    <div className="propertyRow"><span>Aktiviteter</span><b>{module.activities}</b></div>
+    <div className="propertyRow"><span>Målprojekt</span><b>{project?.name || 'Inget projekt valt'}</b></div>
+    <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: '#f3f7f4', color: '#53645a', fontSize: 13, lineHeight: 1.55 }}>
+      I nästa steg kan modulen läggas in som en fristående projektkopia. Den kopian ska kunna anpassas fritt och kompletteras med projektspecifika aktiviteter utan att biblioteksoriginalet ändras.
+    </div>
+  </section>;
 }
 
 function Inspector({ selection, value, structure, project, onSave, onDelete }: { selection: Selection | null; value: any; structure: Structure; project?: Project; onSave: (form: { name: string; description: string; activityType: string }) => Promise<void>; onDelete: () => Promise<void> }) {
