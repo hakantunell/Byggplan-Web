@@ -10,6 +10,7 @@ import './classifications.css';
 import './control-plan.css';
 import './control-plan-hotfix.css';
 import './control-plan-inline.css';
+import './control-plan-navigation-final.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
