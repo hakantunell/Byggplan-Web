@@ -41,16 +41,18 @@ type Selection =
   | { kind: 'activity'; id: string };
 
 type StudioModule = 'project' | 'library';
+type ActivityType = 'work' | 'documentation' | 'measurement' | 'control' | 'approval' | 'wait';
 
+type ModuleActivity = { title: string; description?: string; type: ActivityType };
+type ModuleTask = { title: string; description?: string; activities: ModuleActivity[] };
+type ModuleSection = { name: string; tasks: ModuleTask[] };
 type LibraryModule = {
   id: string;
   icon: string;
   name: string;
   description: string;
-  sections: number;
-  tasks: number;
-  activities: number;
   status: 'utkast' | 'publicerad';
+  sections: ModuleSection[];
 };
 
 const EMPTY_STRUCTURE: Structure = { areas: [], sections: [], tasks: [], activities: [] };
@@ -61,47 +63,243 @@ const LIBRARY_MODULES: LibraryModule[] = [
     id: 'module-electrical',
     icon: '⚡',
     name: 'EL-installation',
-    description: 'Återanvändbar grundstruktur för elcentral, ledningsdragning, uttag, belysning, kontroll och dokumentation.',
-    sections: 5,
-    tasks: 12,
-    activities: 31,
-    status: 'utkast'
+    description: 'Grundstruktur för elcentral, ledningsdragning, uttag, belysning, kontroll och dokumentation.',
+    status: 'utkast',
+    sections: [
+      {
+        name: 'Planering och förberedelse',
+        tasks: [
+          {
+            title: 'Planera elinstallationen',
+            description: 'Gå igenom ritningar, belastning, placeringar och installationsvägar innan arbetet påbörjas.',
+            activities: [
+              { title: 'Kontrollera elritning och placeringar', type: 'control' },
+              { title: 'Märk ut central, dosor, uttag och strömbrytare', type: 'work' },
+              { title: 'Dokumentera överenskomna ändringar', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Elcentral och matning',
+        tasks: [
+          {
+            title: 'Förbered och montera elcentral',
+            activities: [
+              { title: 'Förbered infästning och kabelvägar', type: 'work' },
+              { title: 'Montera elcentral', type: 'work' },
+              { title: 'Dokumentera centralens placering och inkommande ledningar', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Rör, dosor och ledningsvägar',
+        tasks: [
+          {
+            title: 'Montera rör och dosor',
+            activities: [
+              { title: 'Montera apparat- och kopplingsdosor', type: 'work' },
+              { title: 'Dra och fixera installationsrör', type: 'work' },
+              { title: 'Kontrollera böjradier och åtkomlighet', type: 'control' },
+              { title: 'Fotografera dolda rör och dosor före igenbyggnad', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Uttag och belysning',
+        tasks: [
+          {
+            title: 'Installera uttag, brytare och belysningspunkter',
+            activities: [
+              { title: 'Kontrollera höjder och placeringar', type: 'measurement' },
+              { title: 'Montera apparater och anslutningar', type: 'work' },
+              { title: 'Dokumentera avvikelser från ritning', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Kontroll och relationsunderlag',
+        tasks: [
+          {
+            title: 'Kontrollera och dokumentera färdig installation',
+            activities: [
+              { title: 'Genomför föreskrivna kontroller och provningar', type: 'control' },
+              { title: 'Märk central och grupper', type: 'work' },
+              { title: 'Samla relationsunderlag och kontrollresultat', type: 'documentation' }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     id: 'module-crawlspace',
     icon: '🏗',
     name: 'Torpargrund',
     description: 'Grundläggning med schakt, sulor, grundmurar, ventilation, återfyllning och dokumentation.',
-    sections: 6,
-    tasks: 15,
-    activities: 38,
-    status: 'utkast'
+    status: 'utkast',
+    sections: [
+      {
+        name: 'Utsättning och schakt',
+        tasks: [
+          {
+            title: 'Sätt ut och schakta för grund',
+            activities: [
+              { title: 'Sätt ut grundens läge och referensnivåer', type: 'measurement' },
+              { title: 'Dokumentera mark och utsättning före schakt', type: 'documentation' },
+              { title: 'Schakta till projekterade nivåer', type: 'work' },
+              { title: 'Kontrollera schaktbotten och nivåer', type: 'control' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Sulor och grundmurar',
+        tasks: [
+          {
+            title: 'Bygg sulor och grundmurar',
+            activities: [
+              { title: 'Förbered bärlager och formsättning', type: 'work' },
+              { title: 'Kontrollera armering före gjutning', type: 'control' },
+              { title: 'Dokumentera armering och genomföringar', type: 'documentation' },
+              { title: 'Gjut sulor och mura grundväggar', type: 'work' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Ventilation och fuktskydd',
+        tasks: [
+          {
+            title: 'Ordna ventilation och fuktskydd',
+            activities: [
+              { title: 'Montera ventiler enligt plan', type: 'work' },
+              { title: 'Utför mark- och väggfuktskydd', type: 'work' },
+              { title: 'Dokumentera fuktskydd före återfyllning', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Återfyllning och slutkontroll',
+        tasks: [
+          {
+            title: 'Återfyll och kontrollera grunden',
+            activities: [
+              { title: 'Kontrollera dolda installationer före återfyllning', type: 'control' },
+              { title: 'Återfyll och packa i lager', type: 'work' },
+              { title: 'Mät och dokumentera färdiga nivåer', type: 'measurement' }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     id: 'module-log-frame',
     icon: '🪵',
     name: 'Timmerstomme',
     description: 'Förberedelse, timring, knutar, dymlingar, öppningar, kontrollmätning och byggdokumentation.',
-    sections: 5,
-    tasks: 14,
-    activities: 36,
-    status: 'utkast'
+    status: 'utkast',
+    sections: [
+      {
+        name: 'Förberedelse',
+        tasks: [
+          {
+            title: 'Förbered timmer och upplag',
+            activities: [
+              { title: 'Kontrollera dimensioner och märkning', type: 'control' },
+              { title: 'Sortera stockar efter vägg och läge', type: 'work' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Timring',
+        tasks: [
+          {
+            title: 'Timra väggar och knutar',
+            activities: [
+              { title: 'Lägg och rikta syllvarv', type: 'work' },
+              { title: 'Kontrollera diagonaler och nivåer', type: 'measurement' },
+              { title: 'Timra väggvarv, knutar och vindspår', type: 'work' },
+              { title: 'Dokumentera kritiska knutar och infästningar', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Öppningar och sättning',
+        tasks: [
+          {
+            title: 'Utför öppningar och sättningslösningar',
+            activities: [
+              { title: 'Märk ut och kapa öppningar', type: 'work' },
+              { title: 'Montera gåtar och sättningsmån', type: 'work' },
+              { title: 'Kontrollera öppningsmått', type: 'measurement' }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     id: 'module-roof',
     icon: '🏠',
     name: 'Tak',
     description: 'Takbärverk, råspont, underlagstäckning, plåt, genomföringar, säkerhet och kontroll.',
-    sections: 5,
-    tasks: 13,
-    activities: 34,
-    status: 'utkast'
+    status: 'utkast',
+    sections: [
+      {
+        name: 'Takbärverk',
+        tasks: [
+          {
+            title: 'Montera och kontrollera takbärverk',
+            activities: [
+              { title: 'Montera åsar, sparrar eller takstolar', type: 'work' },
+              { title: 'Kontrollera upplag, infästningar och geometri', type: 'control' },
+              { title: 'Dokumentera bärverk före inklädnad', type: 'documentation' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Underlagstak',
+        tasks: [
+          {
+            title: 'Montera råspont och underlagstäckning',
+            activities: [
+              { title: 'Montera råspont', type: 'work' },
+              { title: 'Montera underlagstäckning och anslutningar', type: 'work' },
+              { title: 'Kontrollera genomföringar och tätningar', type: 'control' }
+            ]
+          }
+        ]
+      },
+      {
+        name: 'Yttertak och säkerhet',
+        tasks: [
+          {
+            title: 'Montera yttertak och taksäkerhet',
+            activities: [
+              { title: 'Montera plåt och beslag', type: 'work' },
+              { title: 'Montera taksäkerhet och snörasskydd', type: 'work' },
+              { title: 'Dokumentera färdigt tak och genomföringar', type: 'documentation' }
+            ]
+          }
+        ]
+      }
+    ]
   }
 ];
 
 export function App() {
   const [activeModule, setActiveModule] = useState<StudioModule>('project');
   const [selectedLibraryId, setSelectedLibraryId] = useState(LIBRARY_MODULES[0].id);
+  const [installingModule, setInstallingModule] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
   const [structure, setStructure] = useState<Structure>(EMPTY_STRUCTURE);
@@ -110,13 +308,8 @@ export function App() {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    void loadProjects(false);
-  }, []);
-
-  useEffect(() => {
-    if (projectId) void loadStructure();
-  }, [projectId]);
+  useEffect(() => { void loadProjects(false); }, []);
+  useEffect(() => { if (projectId) void loadStructure(); }, [projectId]);
 
   async function loadProjects(preserveSelection: boolean) {
     try {
@@ -149,8 +342,8 @@ export function App() {
     }
   }
 
-  async function api(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: Record<string, unknown>) {
-    setMessage(method === 'DELETE' ? 'Tar bort…' : 'Sparar…');
+  async function api(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: Record<string, unknown>, quiet = false) {
+    if (!quiet) setMessage(method === 'DELETE' ? 'Tar bort…' : 'Sparar…');
     const response = await fetch(`${API_BASE}${path}`, {
       method,
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
@@ -158,8 +351,10 @@ export function App() {
     });
     const data = await response.json().catch(() => ({})) as { ok?: boolean; id?: string; error?: string };
     if (!response.ok) throw new Error(data.error || 'Åtgärden misslyckades.');
-    setMessage(method === 'DELETE' ? 'Borttaget' : 'Sparat');
-    window.setTimeout(() => setMessage(''), 1600);
+    if (!quiet) {
+      setMessage(method === 'DELETE' ? 'Borttaget' : 'Sparat');
+      window.setTimeout(() => setMessage(''), 1600);
+    }
     return data;
   }
 
@@ -184,6 +379,7 @@ export function App() {
   }, [selection, projects, structure]);
 
   const selectedLibraryModule = LIBRARY_MODULES.find(item => item.id === selectedLibraryId) ?? LIBRARY_MODULES[0];
+  const currentProject = projects.find(project => project.id === projectId);
 
   const toggle = (key: string) => setExpanded(current => {
     const next = new Set(current);
@@ -222,6 +418,56 @@ export function App() {
     }
   }
 
+  async function installLibraryModule() {
+    if (!projectId || !currentProject || installingModule) return;
+    const module = selectedLibraryModule;
+    const duplicate = structure.areas.some(area => area.name.trim().toLocaleLowerCase('sv') === module.name.trim().toLocaleLowerCase('sv'));
+    if (duplicate && !window.confirm(`Projektet innehåller redan arbetsområdet ”${module.name}”. Vill du lägga till ytterligare en kopia?`)) return;
+    if (!window.confirm(`Lägg till modulen ”${module.name}” i projektet ”${currentProject.name}”?\n\nModulen kopieras till projektet och kan därefter redigeras fritt.`)) return;
+
+    setInstallingModule(true);
+    setMessage(`Lägger till ${module.name}…`);
+    try {
+      const areaResult = await api('/api/studio/work-areas', 'POST', { projectId, name: module.name }, true);
+      if (!areaResult.id) throw new Error('API:t returnerade inget id för arbetsområdet.');
+
+      for (const section of module.sections) {
+        const sectionResult = await api('/api/studio/work-sections', 'POST', { workAreaId: areaResult.id, name: section.name }, true);
+        if (!sectionResult.id) throw new Error(`Kunde inte skapa arbetsavsnittet ${section.name}.`);
+
+        for (const task of section.tasks) {
+          const taskResult = await api('/api/studio/tasks', 'POST', {
+            workSectionId: sectionResult.id,
+            title: task.title,
+            description: task.description || ''
+          }, true);
+          if (!taskResult.id) throw new Error(`Kunde inte skapa momentet ${task.title}.`);
+
+          for (const activity of task.activities) {
+            await api('/api/studio/activities', 'POST', {
+              taskId: taskResult.id,
+              title: activity.title,
+              description: activity.description || '',
+              activityType: activity.type
+            }, true);
+          }
+        }
+      }
+
+      setExpanded(current => new Set(current).add(`area:${areaResult.id}`));
+      await loadStructure({ kind: 'area', id: areaResult.id });
+      await loadProjects(true);
+      setActiveModule('project');
+      setMessage(`${module.name} har lagts till i projektet`);
+      window.setTimeout(() => setMessage(''), 2600);
+    } catch (error) {
+      console.error(error);
+      setMessage(error instanceof Error ? error.message : 'Kunde inte lägga till modulen.');
+    } finally {
+      setInstallingModule(false);
+    }
+  }
+
   async function saveSelection(form: { name: string; description: string; activityType: string }) {
     if (!selection || selection.kind === 'project') return;
     if (selection.kind === 'area') await api(`/api/studio/work-areas/${selection.id}`, 'PUT', { name: form.name });
@@ -233,7 +479,6 @@ export function App() {
 
   async function deleteSelection() {
     if (!selection || selection.kind === 'project') return;
-
     let path: string;
     let parent: Selection;
     let name: string;
@@ -274,7 +519,6 @@ export function App() {
     }
 
     if (!window.confirm(`Ta bort ${selectionLabel(selection).toLowerCase()} ”${name}”?`)) return;
-
     try {
       await api(path, 'DELETE');
       await loadStructure(parent);
@@ -284,12 +528,10 @@ export function App() {
     }
   }
 
-  const currentProject = projects.find(project => project.id === projectId);
-
   return <div className="studio">
     <header className="topbar">
       <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>{activeModule === 'project' ? 'Projekteditor' : 'Modulbibliotek'}</small></div></div>
-      <select value={projectId} onChange={event => { setProjectId(event.target.value); setSelection({ kind: 'project', id: event.target.value }); }}>
+      <select value={projectId} onChange={event => { setProjectId(event.target.value); setSelection({ kind: 'project', id: event.target.value }); }} disabled={installingModule}>
         {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
       </select>
       {message && <div className="saveMessage">{message}</div>}
@@ -297,8 +539,8 @@ export function App() {
     </header>
 
     <aside className="rail">
-      <button className={activeModule === 'project' ? 'active' : ''} title="Projektstruktur" onClick={() => setActiveModule('project')}>🌳<span>Struktur</span></button>
-      <button className={activeModule === 'library' ? 'active' : ''} title="Bibliotek" onClick={() => setActiveModule('library')}>📚<span>Bibliotek</span></button>
+      <button className={activeModule === 'project' ? 'active' : ''} title="Projektstruktur" onClick={() => setActiveModule('project')} disabled={installingModule}>🌳<span>Struktur</span></button>
+      <button className={activeModule === 'library' ? 'active' : ''} title="Bibliotek" onClick={() => setActiveModule('library')} disabled={installingModule}>📚<span>Bibliotek</span></button>
       <button disabled title="Kontrollplan">📋<span>Kontrollplan</span></button>
       <button disabled title="Dokument">📄<span>Dokument</span></button>
       <button disabled title="Användare">👥<span>Användare</span></button>
@@ -338,14 +580,14 @@ export function App() {
       </main>
     </> : <>
       <aside className="treePanel">
-        <div className="panelHeader"><div><small>BIBLIOTEK</small><strong>Moduler</strong></div><button title="Ny modul – kommer i nästa steg" disabled>＋</button></div>
+        <div className="panelHeader"><div><small>BIBLIOTEK</small><strong>Moduler</strong></div><button title="Ny modul – kommer senare" disabled>＋</button></div>
         <div className="tree">
           {LIBRARY_MODULES.map(item => <TreeRow key={item.id} depth={0} icon={item.icon} label={item.name} selected={selectedLibraryId === item.id} onSelect={() => setSelectedLibraryId(item.id)} badge={item.status === 'publicerad' ? '✓' : 'U'} />)}
         </div>
       </aside>
 
       <main className="workspace">
-        <div className="workspaceHeader"><div><small>MODULBIBLIOTEK</small><h1>{selectedLibraryModule.name}</h1></div><div className="headerActions"><button className="primary" disabled>Lägg till i projekt</button><button disabled>Redigera modul</button></div></div>
+        <div className="workspaceHeader"><div><small>MODULBIBLIOTEK</small><h1>{selectedLibraryModule.name}</h1></div><div className="headerActions"><button className="primary" onClick={() => void installLibraryModule()} disabled={!projectId || installingModule}>{installingModule ? 'Lägger till…' : 'Lägg till i projekt'}</button><button disabled>Redigera modul</button></div></div>
         <LibraryInspector module={selectedLibraryModule} project={currentProject} />
       </main>
     </>}
@@ -359,19 +601,26 @@ function TreeRow({ depth, icon, label, open, selected, badge, onToggle, onSelect
   </div>;
 }
 
+function moduleCounts(module: LibraryModule) {
+  const tasks = module.sections.reduce((sum, section) => sum + section.tasks.length, 0);
+  const activities = module.sections.reduce((sum, section) => sum + section.tasks.reduce((taskSum, task) => taskSum + task.activities.length, 0), 0);
+  return { sections: module.sections.length, tasks, activities };
+}
+
 function LibraryInspector({ module, project }: { module: LibraryModule; project?: Project }) {
+  const counts = moduleCounts(module);
   return <section className="inspectorCard">
     <div className="objectType">Biblioteksmodul · {module.status}</div>
     <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 22 }}>
       <span style={{ display: 'grid', placeItems: 'center', width: 64, height: 64, borderRadius: 14, background: '#e8f0ea', fontSize: 30, flex: '0 0 auto' }}>{module.icon}</span>
       <div><h2 style={{ margin: '2px 0 7px' }}>{module.name}</h2><p style={{ margin: 0, color: '#66756d', lineHeight: 1.55 }}>{module.description}</p></div>
     </div>
-    <div className="propertyRow"><span>Arbetsavsnitt</span><b>{module.sections}</b></div>
-    <div className="propertyRow"><span>Moment</span><b>{module.tasks}</b></div>
-    <div className="propertyRow"><span>Aktiviteter</span><b>{module.activities}</b></div>
+    <div className="propertyRow"><span>Arbetsavsnitt</span><b>{counts.sections}</b></div>
+    <div className="propertyRow"><span>Moment</span><b>{counts.tasks}</b></div>
+    <div className="propertyRow"><span>Aktiviteter</span><b>{counts.activities}</b></div>
     <div className="propertyRow"><span>Målprojekt</span><b>{project?.name || 'Inget projekt valt'}</b></div>
     <div style={{ marginTop: 20, padding: 16, borderRadius: 10, background: '#f3f7f4', color: '#53645a', fontSize: 13, lineHeight: 1.55 }}>
-      I nästa steg kan modulen läggas in som en fristående projektkopia. Den kopian ska kunna anpassas fritt och kompletteras med projektspecifika aktiviteter utan att biblioteksoriginalet ändras.
+      När modulen läggs till skapas en fristående kopia i projektet. Kopian kan ändras, byggas ut och kompletteras med egna aktiviteter utan att biblioteksmodulen påverkas.
     </div>
   </section>;
 }
@@ -404,11 +653,8 @@ function Inspector({ selection, value, structure, project, onSave, onDelete }: {
 
   async function save() {
     setSaving(true);
-    try {
-      await onSave({ name, description, activityType });
-    } finally {
-      setSaving(false);
-    }
+    try { await onSave({ name, description, activityType }); }
+    finally { setSaving(false); }
   }
 
   return <section className="inspectorCard">
