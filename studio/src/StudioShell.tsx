@@ -1,23 +1,36 @@
 import { useEffect, useState } from 'react';
-import { App } from './App';
-import { TemplateLab } from './TemplateLab';
+import { StudioWorkspace } from './StudioWorkspace';
+import { ControlPlanOverlay } from './ControlPlanOverlay';
 
-export function StudioShell() {
-  const [module, setModule] = useState<'project' | 'templates'>(() => window.location.hash === '#templates' ? 'templates' : 'project');
+type StudioView = 'project' | 'control-plan';
 
+function MountedControlPlan() {
   useEffect(() => {
-    const sync = () => setModule(window.location.hash === '#templates' ? 'templates' : 'project');
-    window.addEventListener('hashchange', sync);
-    return () => window.removeEventListener('hashchange', sync);
+    const timer = window.setTimeout(() => {
+      const launcher = document.querySelector('.controlPlanRailButton') as HTMLButtonElement | null;
+      launcher?.click();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  function open(next: 'project' | 'templates') {
-    window.location.hash = next === 'templates' ? 'templates' : '';
-    setModule(next);
-  }
+  return <ControlPlanOverlay />;
+}
 
-  return <>
-    {module === 'project' ? <App /> : <TemplateLab onBack={() => open('project')} />}
-    {module === 'project' && <button className="templateLauncher" onClick={() => open('templates')} title="Öppna bibliotek och projektmallar">📚<span>Mallar</span></button>}
-  </>;
+export function StudioShell() {
+  const [view, setView] = useState<StudioView>('project');
+
+  return <div className={`studioShell view-${view}`}>
+    <StudioWorkspace />
+
+    <nav className="studioPrimaryNavigation" aria-label="Huvudvyer">
+      <button type="button" className={view === 'project' ? 'active' : ''} onClick={() => setView('project')} title="Projekt">
+        <span className="studioNavIcon">🌳</span><span>Projekt</span>
+      </button>
+      <button type="button" className={view === 'control-plan' ? 'active' : ''} onClick={() => setView('control-plan')} title="Kontrollplan">
+        <span className="studioNavIcon">📋</span><span>Kontrollplan</span>
+      </button>
+    </nav>
+
+    {view === 'control-plan' && <MountedControlPlan />}
+  </div>;
 }
