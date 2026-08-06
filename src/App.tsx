@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 type ActivityType='perform'|'document'|'measurement'|'check'|'approval'|'note'|'choice';
 type Activity={id:string;title:string;description?:string;type:ActivityType;unit?:string;required:boolean;blocking:boolean;irreversible:boolean;technicalResourceId?:string;done:boolean;value?:string};
@@ -23,6 +24,7 @@ export function App(){
   const[openSections,setOpenSections]=useState<string[]>([]);
   const[openTasks,setOpenTasks]=useState<string[]>([]);
   const[openTechnical,setOpenTechnical]=useState<string[]>([]);
+  const[openActivityId,setOpenActivityId]=useState<string|null>(null);
   const currentProject=projects.find(p=>p.id===projectId);
 
   const grouped=useMemo(()=>{
@@ -60,10 +62,15 @@ export function App(){
   },[]);
 
   useEffect(()=>{void loadProjects()},[loadProjects]);
-  useEffect(()=>{if(projectId){setOpenAreas([]);setOpenSections([]);setOpenTasks([]);setOpenTechnical([]);void loadTasks(projectId)}},[projectId,loadTasks]);
+  useEffect(()=>{if(projectId){setOpenAreas([]);setOpenSections([]);setOpenTasks([]);setOpenTechnical([]);setOpenActivityId(null);void loadTasks(projectId)}},[projectId,loadTasks]);
   useEffect(()=>{const timer=setInterval(()=>{if(document.visibilityState==='visible'&&projectId)void loadTasks(projectId)},60000);return()=>clearInterval(timer)},[projectId,loadTasks]);
 
-  const toggle=(setter:React.Dispatch<React.SetStateAction<string[]>>,id:string,single=false)=>setter(current=>current.includes(id)?current.filter(x=>x!==id):(single?[id]:[...current,id]));
+  const toggle=(setter:Dispatch<SetStateAction<string[]>>,id:string,single=false)=>setter(current=>current.includes(id)?current.filter(x=>x!==id):(single?[id]:[...current,id]));
+  const toggleTask=(task:Task)=>{
+    const isOpen=openTasks.includes(task.id);
+    setOpenTasks(isOpen?[]:[task.id]);
+    setOpenActivityId(isOpen?null:(task.activities.find(activity=>!activity.done)?.id??task.activities[0]?.id??null));
+  };
   const updateActivity=async(taskId:string,activity:Activity,value?:string)=>{
     if(!navigator.onLine)return alert('Du måste vara online för att registrera.');
     const done=activity.type==='measurement'?Boolean(value):!activity.done;
@@ -95,18 +102,42 @@ export function App(){
             <button className="sectionHeader" onClick={()=>toggle(setOpenSections,section.id)}><span className="sectionIcon">⌖</span><span className="headerText"><b>{section.name}</b><small>{section.tasks.length} moment</small></span><em>{sectionOpen?'−':'+'}</em></button>
             {sectionOpen&&<div className="sectionBody">{section.tasks.map(task=>{
               const taskOpen=openTasks.includes(task.id);const completed=task.activities.filter(a=>a.done).length;
+              const nextActivityId=task.activities.find(activity=>!activity.done)?.id;
               return <article className={`taskCard ${taskOpen?'open':''}`} key={task.id}>
-                <button className="taskHeader" onClick={()=>toggle(setOpenTasks,task.id,true)}><i className={task.status}/><span className="headerText"><b>{task.title}</b><small>{completed}/{task.activities.length} aktiviteter klara</small></span><span className={`pill ${task.status}`}>{labels[task.status]}</span><em>{taskOpen?'−':'+'}</em></button>
-                {taskOpen&&<div className="taskBody">{task.description&&<p className="taskDescription">{task.description}</p>}<h3>Aktiviteter</h3><div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} technical={task.technical} onUpdate={updateActivity}/>)}</div><div className="taskActions"><button className="technicalButton" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📎</span><span><b>Tekniskt underlag</b><small>{task.technical.length} poster</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button><button className="submitButton" onClick={()=>void submit(task)}><span>➤</span><span><b>Skicka för kontroll</b><small>När allt är klart</small></span></button></div>{openTechnical.includes(task.id)&&<TechnicalList items={task.technical}/>}</div>}
+                <button className="taskHeader" onClick={()=>toggleTask(task)}><i className={task.status}/><span className="headerText"><b>{task.title}</b><small>{completed}/{task.activities.length} aktiviteter klara</small></span><span className={`pill ${task.status}`}>{labels[task.status]}</span><em>{taskOpen?'−':'+'}</em></button>
+                {taskOpen&&<div className="taskBody">
+                  {task.description&&<p className="taskDescription">{task.description}</p>}
+                  <button className="technicalButton technicalFirst" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📚</span><span><b>Tekniskt underlag</b><small>{task.technical.length} poster · läs före start</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button>
+                  {openTechnical.includes(task.id)&&<TechnicalList items={task.technical}/>}                  
+                  <h3>Aktiviteter</h3>
+                  <div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} technical={task.technical} expanded={openActivityId===activity.id} isNext={activity.id===nextActivityId} onToggle={()=>setOpenActivityId(current=>current===activity.id?null:activity.id)} onUpdate={updateActivity}/>)}</div>
+                  <button className="submitButton fullWidth" onClick={()=>void submit(task)}><span>➤</span><span><b>Skicka för kontroll</b><small>När allt är klart</small></span></button>
+                </div>}
               </article>})}</div>}
           </section>})}</div>}
       </section>})}</div></main>
   </div>;
 }
 
-function ActivityRow({activity,index,task,technical,onUpdate}:{activity:Activity;index:number;task:Task;technical:TechnicalItem[];onUpdate:(taskId:string,activity:Activity,value?:string)=>Promise<void>}){
+function ActivityRow({activity,index,task,technical,expanded,isNext,onToggle,onUpdate}:{activity:Activity;index:number;task:Task;technical:TechnicalItem[];expanded:boolean;isNext:boolean;onToggle:()=>void;onUpdate:(taskId:string,activity:Activity,value?:string)=>Promise<void>}){
   const linked=technical.find(item=>item.id===activity.technicalResourceId);
-  return <div className={`activityRow ${activity.done?'done':''}`}><div className="activityStep"><span>{index+1}</span>{index<task.activities.length-1&&<i/>}</div><div className="activityCard"><div className="activityTitle"><span className={`activityIcon ${activity.type}`}>{activityIcons[activity.type]}</span><div><small>{activityLabels[activity.type]}</small><b>{activity.title}</b></div><span className={`activityStatus ${activity.done?'done':''}`}>{activity.done?'Klar':'Ej klar'}</span></div>{activity.description&&<p>{activity.description}</p>}{activity.irreversible&&<div className="warning">⚠ Går inte att kontrollera i efterhand</div>}{activity.type==='measurement'?<label className="measurement"><input inputMode="decimal" placeholder="Ange värde" value={activity.value??''} onChange={e=>void onUpdate(task.id,activity,e.target.value)}/><span>{activity.unit}</span></label>:<button className="activityAction" onClick={()=>void onUpdate(task.id,activity)}>{activity.type==='document'?'📷 '+(activity.done?'Dokumenterat':'Ta foto / dokumentera'):activity.done?'Markera som ej klar':'Markera klar'}</button>}{linked&&<button className="linkedTechnical">Se underlag: {linked.title}</button>}</div></div>;
+  return <div className={`activityRow ${activity.done?'done':''} ${isNext?'next':''}`}>
+    <div className="activityStep"><span>{activity.done?'✓':index+1}</span>{index<task.activities.length-1&&<i/>}</div>
+    <div className={`activityCard ${expanded?'expanded':''}`}>
+      <button className="activitySummary" onClick={onToggle}>
+        <span className={`activityIcon ${activity.type}`}>{activityIcons[activity.type]}</span>
+        <span className="activitySummaryText">{isNext&&!activity.done&&<small className="nextLabel">▶ Nästa aktivitet</small>}<b>{activity.title}</b><small>{activityLabels[activity.type]}</small></span>
+        <span className={`activityStatus ${activity.done?'done':''}`}>{activity.done?'Klar':'Ej klar'}</span>
+        <em>{expanded?'−':'+'}</em>
+      </button>
+      {expanded&&<div className="activityDetails">
+        {activity.description&&<p>{activity.description}</p>}
+        {activity.irreversible&&<div className="warning">⚠ Går inte att kontrollera i efterhand</div>}
+        {activity.type==='measurement'?<label className="measurement"><input inputMode="decimal" placeholder="Ange värde" value={activity.value??''} onChange={e=>void onUpdate(task.id,activity,e.target.value)}/><span>{activity.unit}</span></label>:<button className="activityAction" onClick={()=>void onUpdate(task.id,activity)}>{activity.type==='document'?'📷 '+(activity.done?'Dokumenterat':'Ta foto / dokumentera'):activity.done?'Markera som ej klar':'Markera klar'}</button>}
+        {linked&&<button className="linkedTechnical">Se underlag: {linked.title}</button>}
+      </div>}
+    </div>
+  </div>;
 }
 
 function TechnicalList({items}:{items:TechnicalItem[]}){return <div className="technicalList">{items.length===0&&<p>Inget tekniskt underlag är kopplat.</p>}{items.map(item=><article key={item.id}><span>{item.type==='drawing'?'▱':item.type==='image'?'▧':item.type==='document'?'▤':item.type==='material'?'▦':'i'}</span><div><small>{typeLabels[item.type]}{item.sourceLevel?` · ${levelLabels[item.sourceLevel]}`:''}</small><b>{item.title}</b>{item.summary&&<p>{item.summary}</p>}</div></article>)}</div>}
