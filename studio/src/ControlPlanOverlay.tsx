@@ -1,0 +1,195 @@
+import { useEffect, useMemo, useState } from 'react';
+
+type ControlPlanSummary = {
+  id: string;
+  title: string;
+  source_filename: string;
+  status: string;
+  imported_at: string;
+  point_count: number;
+  completed_count: number;
+};
+
+type ControlPlanPoint = {
+  id: string;
+  code: string;
+  description: string;
+  control_method: string;
+  responsible_role: string;
+  evidence_required: string;
+  result: string;
+  completed: number;
+};
+
+type ControlPlanDetail = {
+  id: string;
+  title: string;
+  source_filename: string;
+  source_mime_type: string;
+  status: string;
+};
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
+
+function selectedProjectId() {
+  return (document.querySelector('.topbar select') as HTMLSelectElement | null)?.value || '';
+}
+
+function selectedProjectName() {
+  const select = document.querySelector('.topbar select') as HTMLSelectElement | null;
+  return select?.selectedOptions[0]?.textContent?.trim() || 'valt projekt';
+}
+
+export function ControlPlanOverlay() {
+  const [open, setOpen] = useState(false);
+  const [plans, setPlans] = useState<ControlPlanSummary[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [detail, setDetail] = useState<ControlPlanDetail | null>(null);
+  const [points, setPoints] = useState<ControlPlanPoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [title, setTitle] = useState('Kontrollplan');
+  const [file, setFile] = useState<File | null>(null);
+  const [importText, setImportText] = useState('');
+
+  useEffect(() => { if (open) void loadPlans(); }, [open]);
+  useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId]);
+
+  const parsedPoints = useMemo(() => importText.split('\n').map(line => line.trim()).filter(Boolean).map((line, index) => {
+    const parts = line.split('|').map(part => part.trim());
+    return {
+      code: parts[0] || `KP-${index + 1}`,
+      description: parts[1] || parts[0] || '',
+      method: parts[2] || '',
+      responsibleRole: parts[3] || '',
+      evidenceRequired: parts[4] || ''
+    };
+  }).filter(point => point.description), [importText]);
+
+  async function loadPlans() {
+    const projectId = selectedProjectId();
+    if (!projectId) return;
+    setLoading(true);
+    setMessage('');
+    try {
+      const response = await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/control-plans`, { cache: 'no-store' });
+      const data = await response.json().catch(() => ({})) as { controlPlans?: ControlPlanSummary[]; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Kunde inte hämta kontrollplaner.');
+      const next = data.controlPlans || [];
+      setPlans(next);
+      if (!selectedId || !next.some(plan => plan.id === selectedId)) setSelectedId(next[0]?.id || '');
+      if (!next.length) { setDetail(null); setPoints([]); setShowImport(true); }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kunde inte hämta kontrollplaner.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadDetail(id: string) {
+    try {
+      const response = await fetch(`${API_BASE}/api/studio/control-plans/${encodeURIComponent(id)}`, { cache: 'no-store' });
+      const data = await response.json().catch(() => ({})) as { controlPlan?: ControlPlanDetail; points?: ControlPlanPoint[]; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Kunde inte läsa kontrollplanen.');
+      setDetail(data.controlPlan || null);
+      setPoints(data.points || []);
+      setShowImport(false);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kunde inte läsa kontrollplanen.');
+    }
+  }
+
+  async function importPlan() {
+    const projectId = selectedProjectId();
+    if (!projectId || !file || !title.trim()) return;
+    setLoading(true);
+    setMessage('Importerar digital kopia…');
+    try {
+      const response = await fetch(`${API_BASE}/api/studio/control-plans/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          title: title.trim(),
+          sourceFilename: file.name,
+          sourceMimeType: file.type,
+          points: parsedPoints
+        })
+      });
+      const data = await response.json().catch(() => ({})) as { id?: string; createdPoints?: number; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Importen misslyckades.');
+      setMessage(`Kontrollplanen importerades med ${data.createdPoints || 0} kontrollpunkter.`);
+      setFile(null);
+      setImportText('');
+      setShowImport(false);
+      await loadPlans();
+      if (data.id) setSelectedId(data.id);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Importen misslyckades.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function updatePoint(point: ControlPlanPoint, patch: Partial<ControlPlanPoint>) {
+    const next = { ...point, ...patch };
+    setPoints(current => current.map(item => item.id === point.id ? next : item));
+    try {
+      const response = await fetch(`${API_BASE}/api/studio/control-plan-points/${encodeURIComponent(point.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: next.result, completed: Boolean(next.completed) })
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Kunde inte uppdatera kontrollpunkten.');
+      await loadPlans();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kunde inte uppdatera kontrollpunkten.');
+    }
+  }
+
+  return <>
+    <button className="controlPlanRailButton" title="Kontrollplan" onClick={() => setOpen(true)}>📋<span>Kontrollplan</span></button>
+    {open && <div className="controlPlanBackdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section className="controlPlanWindow">
+        <header>
+          <div><small>KONTROLLPLAN</small><h2>{selectedProjectName()}</h2></div>
+          <div className="controlPlanHeaderActions"><button onClick={() => setShowImport(true)}>＋ Importera</button><button className="close" onClick={() => setOpen(false)}>×</button></div>
+        </header>
+        <div className="controlPlanBody">
+          <aside>
+            <strong>Kontrollplaner</strong>
+            {loading && !plans.length && <p>Hämtar…</p>}
+            {plans.map(plan => <button key={plan.id} className={selectedId === plan.id ? 'active' : ''} onClick={() => setSelectedId(plan.id)}>
+              <span>{plan.title}</span><small>{plan.completed_count}/{plan.point_count} klara</small>
+            </button>)}
+            {!plans.length && !loading && <p>Ingen kontrollplan importerad.</p>}
+          </aside>
+          <main>
+            {showImport ? <div className="controlPlanImport">
+              <div className="objectType">Importera original och skapa digital kopia</div>
+              <label><span>Titel</span><input value={title} onChange={event => setTitle(event.target.value)} /></label>
+              <label><span>Originalfil från KA</span><input type="file" accept=".pdf,.doc,.docx,.xlsx,.csv,.txt" onChange={event => setFile(event.target.files?.[0] || null)} /></label>
+              <div className="controlPlanImportNotice">Originalfilens namn och typ registreras nu. Automatisk läsning av PDF/Word byggs som nästa importsteg. Under tiden kan ett granskat importutkast klistras in nedan.</div>
+              <label><span>Kontrollpunkter – en per rad</span><textarea value={importText} onChange={event => setImportText(event.target.value)} placeholder={'KP-01 | Utsättning kontrolleras | Mätning | Byggherre | Foto och mått\nKP-02 | Armering före gjutning | Visuell kontroll | KA | Foto'} /></label>
+              <p className="muted">Format: kod | kontrollpunkt | metod | ansvarig | underlag. {parsedPoints.length} punkter identifierade.</p>
+              <div className="formActions"><button onClick={() => setShowImport(false)}>Avbryt</button><button className="primary" disabled={!file || !title.trim() || loading} onClick={() => void importPlan()}>{loading ? 'Importerar…' : 'Skapa digital kontrollplan'}</button></div>
+            </div> : detail ? <div className="controlPlanDetail">
+              <div className="controlPlanDocumentHeader"><div><div className="objectType">{detail.status}</div><h3>{detail.title}</h3><p>Original: {detail.source_filename}</p></div><button disabled>Skriv ut ifylld kontrollplan</button></div>
+              <div className="controlPlanProgress"><span>Färdigställda kontrollpunkter</span><strong>{points.filter(point => point.completed).length} / {points.length}</strong></div>
+              <div className="controlPlanPoints">
+                {points.map(point => <article key={point.id} className={point.completed ? 'completed' : ''}>
+                  <label className="controlPlanCheck"><input type="checkbox" checked={Boolean(point.completed)} onChange={event => void updatePoint(point, { completed: event.target.checked ? 1 : 0 })} /><span>{point.code}</span></label>
+                  <div><h4>{point.description}</h4><p>{[point.control_method, point.responsible_role, point.evidence_required].filter(Boolean).join(' · ') || 'Ingen ytterligare information angiven'}</p><textarea value={point.result || ''} onChange={event => setPoints(current => current.map(item => item.id === point.id ? { ...item, result: event.target.value } : item))} onBlur={event => void updatePoint(point, { result: event.target.value })} placeholder="Resultat, kommentar eller hänvisning till dokumentation…" /></div>
+                </article>)}
+                {!points.length && <p>Den digitala kontrollplanen innehåller ännu inga kontrollpunkter.</p>}
+              </div>
+            </div> : <div className="empty"><span>📋</span><h2>Importera kontrollplanen från din KA</h2><p>Originalet bevaras som källa och en digital projektkopia används för kopplingar, avbockning och senare utskrift.</p><button className="primary" onClick={() => setShowImport(true)}>Importera kontrollplan</button></div>}
+            {message && <div className="controlPlanMessage">{message}</div>}
+          </main>
+        </div>
+      </section>
+    </div>}
+  </>;
+}
