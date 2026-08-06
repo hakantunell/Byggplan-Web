@@ -248,19 +248,20 @@ export function App() {
       <div className="panelHeader"><div><small>PROJEKTSTRUKTUR</small><strong>{currentProject?.name || 'Projekt'}</strong></div><button title="Skapa under markerat objekt" onClick={() => void createChild()} disabled={!selection || selection.kind === 'activity'}>＋</button></div>
       <div className="tree">
         {state === 'loading' && <p className="muted">Hämtar struktur…</p>}
+        {currentProject && <TreeRow depth={0} icon="🏗" label={currentProject.name} selected={selection?.kind === 'project' && selection.id === currentProject.id} onSelect={() => setSelection({ kind: 'project', id: currentProject.id })} badge={structure.areas.length.toString()} />}
         {tree.map(area => {
           const areaKey = `area:${area.id}`;
           return <div className="treeGroup" key={area.id}>
-            <TreeRow depth={0} icon="⛏" label={area.name} open={expanded.has(areaKey)} selected={selection?.kind === 'area' && selection.id === area.id} onToggle={() => toggle(areaKey)} onSelect={() => setSelection({ kind: 'area', id: area.id })} />
+            <TreeRow depth={1} icon="⛏" label={area.name} open={expanded.has(areaKey)} selected={selection?.kind === 'area' && selection.id === area.id} onToggle={() => toggle(areaKey)} onSelect={() => setSelection({ kind: 'area', id: area.id })} />
             {expanded.has(areaKey) && area.sections.map(section => {
               const sectionKey = `section:${section.id}`;
               return <div key={section.id}>
-                <TreeRow depth={1} icon="⌖" label={section.name} open={expanded.has(sectionKey)} selected={selection?.kind === 'section' && selection.id === section.id} onToggle={() => toggle(sectionKey)} onSelect={() => setSelection({ kind: 'section', id: section.id })} />
+                <TreeRow depth={2} icon="⌖" label={section.name} open={expanded.has(sectionKey)} selected={selection?.kind === 'section' && selection.id === section.id} onToggle={() => toggle(sectionKey)} onSelect={() => setSelection({ kind: 'section', id: section.id })} />
                 {expanded.has(sectionKey) && section.tasks.map(task => {
                   const taskKey = `task:${task.id}`;
                   return <div key={task.id}>
-                    <TreeRow depth={2} icon="▣" label={task.title} open={expanded.has(taskKey)} selected={selection?.kind === 'task' && selection.id === task.id} onToggle={() => toggle(taskKey)} onSelect={() => setSelection({ kind: 'task', id: task.id })} badge={task.activities.length.toString()} />
-                    {expanded.has(taskKey) && task.activities.map(activity => <TreeRow key={activity.id} depth={3} icon="○" label={activity.title} selected={selection?.kind === 'activity' && selection.id === activity.id} onSelect={() => setSelection({ kind: 'activity', id: activity.id })} />)}
+                    <TreeRow depth={3} icon="▣" label={task.title} open={expanded.has(taskKey)} selected={selection?.kind === 'task' && selection.id === task.id} onToggle={() => toggle(taskKey)} onSelect={() => setSelection({ kind: 'task', id: task.id })} badge={task.activities.length.toString()} />
+                    {expanded.has(taskKey) && task.activities.map(activity => <TreeRow key={activity.id} depth={4} icon="○" label={activity.title} selected={selection?.kind === 'activity' && selection.id === activity.id} onSelect={() => setSelection({ kind: 'activity', id: activity.id })} />)}
                   </div>;
                 })}
               </div>;
