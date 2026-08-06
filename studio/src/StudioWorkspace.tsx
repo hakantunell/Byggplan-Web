@@ -6,16 +6,21 @@ type PaletteActivity = { title: string; type: ActivityType };
 type PaletteTask = { title: string; activities: PaletteActivity[] };
 type PaletteSection = { name: string; tasks: PaletteTask[] };
 type PaletteModule = { id: string; icon: string; name: string; sections: PaletteSection[] };
-type DragPayload = { kind: 'module'; moduleId: string } | { kind: 'section'; moduleId: string; sectionName: string };
+type DragPayload =
+  | { kind: 'module'; moduleId: string }
+  | { kind: 'section'; moduleId: string; sectionName: string };
 
-type ApiResult = { id?: string; error?: string };
 type ProjectStructure = {
   areas: { id: string; name: string }[];
-  sections?: { id: string; work_area_id: string; name: string }[];
+};
+
+type ImportResult = {
+  ok?: boolean;
+  error?: string;
+  created?: { sections: number; tasks: number; activities: number };
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
-const pause = (milliseconds: number) => new Promise<void>(resolve => window.setTimeout(resolve, milliseconds));
 
 const MODULES: PaletteModule[] = [
   {
@@ -85,112 +90,66 @@ const MODULES: PaletteModule[] = [
   }
 ];
 
+const ACTIVITY_ICONS: Record<ActivityType, string> = {
+  work: '●',
+  documentation: '📷',
+  measurement: '📏',
+  control: '✓',
+  approval: '✍',
+  wait: '📝'
+};
+
 export function StudioWorkspace() {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['electrical']));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set([
+    'module:crawlspace',
+    'section:crawlspace:Utsättning och schakt',
+    'task:crawlspace:Utsättning och schakt:Sätt ut och schakta för grund'
+  ]));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
-  const [dropTarget, setDropTarget] = useState('');
+  const [dropTarget, setDropTarget] = useState(false);
   const [projectRevision, setProjectRevision] = useState(0);
 
-  function toggle(id: string) {
+  function toggle(key: string) {
     setExpanded(current => {
       const next = new Set(current);
-      next.has(id) ? next.delete(id) : next.add(id);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
   }
 
   function beginDrag(event: React.DragEvent, payload: DragPayload) {
+    event.stopPropagation();
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData('application/x-byggplan-library', JSON.stringify(payload));
   }
 
-  function getProjectId(): string {
+  function getProjectId() {
     return (document.querySelector('.topbar select') as HTMLSelectElement | null)?.value || '';
   }
 
-  async function api(path: string, body: Record<string, unknown>): Promise<ApiResult> {
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      try {
-        const response = await fetch(`${API_BASE}${path}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-        const data = await response.json().catch(() => ({})) as ApiResult;
-        if (response.ok) {
-          await pause(120);
-          return data;
-        }
-        lastError = new Error(data.error || `API-fel (${response.status}).`);
-        if (response.status < 500 && response.status !== 429) throw lastError;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Åtgärden misslyckades.');
-      }
-      await pause(500 * (attempt + 1));
-    }
-    throw lastError || new Error('Åtgärden misslyckades.');
-  }
-
   async function loadProjectStructure(projectId: string): Promise<ProjectStructure> {
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      try {
-        const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
-        if (response.ok) return await response.json() as ProjectStructure;
-        lastError = new Error(`Kunde inte läsa projektstrukturen (${response.status}).`);
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Kunde inte läsa projektstrukturen.');
-      }
-      await pause(500 * (attempt + 1));
-    }
-    throw lastError || new Error('Kunde inte läsa projektstrukturen.');
+    const response = await fetch(`${API_BASE}/api/studio/structure?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Kunde inte läsa projektstrukturen (${response.status}).`);
+    return response.json() as Promise<ProjectStructure>;
   }
 
-  async function createSectionTree(workAreaId: string, section: PaletteSection) {
-    const sectionResult = await api('/api/studio/work-sections', { workAreaId, name: section.name });
-    if (!sectionResult.id) throw new Error(`Kunde inte skapa arbetsavsnittet ${section.name}.`);
-    for (const task of section.tasks) {
-      const taskResult = await api('/api/studio/tasks', { workSectionId: sectionResult.id, title: task.title, description: '' });
-      if (!taskResult.id) throw new Error(`Kunde inte skapa momentet ${task.title}.`);
-      for (const activity of task.activities) {
-        await api('/api/studio/activities', { taskId: taskResult.id, title: activity.title, description: '', activityType: activity.type });
-      }
-    }
-  }
-
-  async function ensureAllModuleSections(projectId: string, workAreaId: string, module: PaletteModule) {
-    for (let verification = 0; verification < 3; verification += 1) {
-      await pause(350);
-      const structure = await loadProjectStructure(projectId);
-      const existingNames = new Set(
-        (structure.sections || [])
-          .filter(section => section.work_area_id === workAreaId)
-          .map(section => section.name.trim().toLocaleLowerCase('sv'))
-      );
-      const missing = module.sections.filter(section => !existingNames.has(section.name.trim().toLocaleLowerCase('sv')));
-      if (missing.length === 0) return;
-      for (const section of missing) {
-        setNotice(`Kompletterar ${section.name}…`);
-        await createSectionTree(workAreaId, section);
-      }
-    }
-
-    const finalStructure = await loadProjectStructure(projectId);
-    const finalNames = new Set(
-      (finalStructure.sections || [])
-        .filter(section => section.work_area_id === workAreaId)
-        .map(section => section.name.trim().toLocaleLowerCase('sv'))
-    );
-    const stillMissing = module.sections.filter(section => !finalNames.has(section.name.trim().toLocaleLowerCase('sv')));
-    if (stillMissing.length > 0) throw new Error(`Importen blev inte komplett. Saknas: ${stillMissing.map(section => section.name).join(', ')}.`);
+  async function importTree(body: Record<string, unknown>): Promise<ImportResult> {
+    const response = await fetch(`${API_BASE}/api/studio/import-tree`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({})) as ImportResult;
+    if (!response.ok) throw new Error(data.error || `Importen misslyckades (${response.status}).`);
+    return data;
   }
 
   async function handleDrop(event: React.DragEvent) {
     event.preventDefault();
-    setDropTarget('');
+    setDropTarget(false);
     if (busy) return;
+
     const raw = event.dataTransfer.getData('application/x-byggplan-library');
     if (!raw) return;
 
@@ -206,37 +165,32 @@ export function StudioWorkspace() {
     const projectId = getProjectId();
     if (!module || !projectId) return;
 
-    const targetRow = (event.target as HTMLElement).closest('.treeRow') as HTMLElement | null;
-    const targetLabel = targetRow?.querySelector('.nodeLabel')?.textContent?.trim() || '';
-
     setBusy(true);
-    setNotice('Lägger till objektet…');
+    setNotice('Lägger till komponenten…');
+
     try {
+      let result: ImportResult;
       if (payload.kind === 'module') {
-        const areaResult = await api('/api/studio/work-areas', { projectId, name: module.name });
-        if (!areaResult.id) throw new Error('Kunde inte skapa arbetsområdet.');
-        for (let index = 0; index < module.sections.length; index += 1) {
-          const section = module.sections[index];
-          setNotice(`Lägger till avsnitt ${index + 1} av ${module.sections.length}: ${section.name}…`);
-          await createSectionTree(areaResult.id, section);
-        }
-        setNotice('Verifierar att hela modulen är skapad…');
-        await ensureAllModuleSections(projectId, areaResult.id, module);
-        setNotice(`${module.name} lades till med alla ${module.sections.length} avsnitt.`);
+        result = await importTree({ projectId, areaName: module.name, sections: module.sections });
       } else {
+        const targetRow = (event.target as HTMLElement).closest('.treeRow') as HTMLElement | null;
+        const targetLabel = targetRow?.querySelector('.nodeLabel')?.textContent?.trim() || '';
         const structure = await loadProjectStructure(projectId);
         const area = structure.areas.find(item => item.name === targetLabel);
         if (!area) throw new Error('Släpp arbetsavsnittet på ett arbetsområde i projektträdet.');
         const section = module.sections.find(item => item.name === payload.sectionName);
-        if (!section) throw new Error('Arbetsavsnittet kunde inte hittas i biblioteket.');
-        await createSectionTree(area.id, section);
-        setNotice(`${section.name} lades till under ${area.name}.`);
+        if (!section) throw new Error('Arbetsavsnittet kunde inte hittas i komponenten.');
+        result = await importTree({ projectId, targetWorkAreaId: area.id, sections: [section] });
       }
 
+      const created = result.created;
+      setNotice(created
+        ? `Klart: ${created.sections} avsnitt, ${created.tasks} moment och ${created.activities} aktiviteter skapades.`
+        : 'Komponenten lades till.');
       setProjectRevision(current => current + 1);
-      window.setTimeout(() => setNotice(''), 4000);
+      window.setTimeout(() => setNotice(''), 5000);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Kunde inte lägga till objektet.');
+      setNotice(error instanceof Error ? error.message : 'Kunde inte lägga till komponenten.');
       setProjectRevision(current => current + 1);
     } finally {
       setBusy(false);
@@ -245,24 +199,66 @@ export function StudioWorkspace() {
 
   return <div className="studioWorkspace">
     <aside className="palette">
-      <div className="paletteHeader"><small>BIBLIOTEKSPALET</small><strong>Byggblock</strong><input placeholder="Sök i biblioteket…" disabled /></div>
-      <div className="paletteHint">Dra en hel modul till projektet eller ett arbetsavsnitt till önskat arbetsområde.</div>
+      <div className="paletteHeader">
+        <small>KOMPONENTER</small>
+        <strong>Byggblock</strong>
+        <input placeholder="Sök komponenter…" disabled />
+      </div>
+      <div className="paletteHint">Expandera för att granska innehållet. Dra en modul till projektet eller ett avsnitt till ett arbetsområde.</div>
       <div className="paletteList">
-        {MODULES.map(module => <div className="paletteModule" key={module.id}>
-          <div className="paletteModuleRow" draggable={!busy} onDragStart={event => beginDrag(event, { kind: 'module', moduleId: module.id })}>
-            <button onClick={() => toggle(module.id)}>{expanded.has(module.id) ? '⌄' : '›'}</button>
-            <span>{module.icon}</span><strong>{module.name}</strong><small>{module.sections.length}</small>
-          </div>
-          {expanded.has(module.id) && <div className="paletteSections">
-            {module.sections.map(section => <div className="paletteSection" key={section.name} draggable={!busy} onDragStart={event => beginDrag(event, { kind: 'section', moduleId: module.id, sectionName: section.name })}>
-              <span>⌖</span><span>{section.name}</span>
-            </div>)}
-          </div>}
-        </div>)}
+        {MODULES.map(module => {
+          const moduleKey = `module:${module.id}`;
+          const taskCount = module.sections.reduce((sum, section) => sum + section.tasks.length, 0);
+          const activityCount = module.sections.reduce((sum, section) => sum + section.tasks.reduce((taskSum, task) => taskSum + task.activities.length, 0), 0);
+          return <div className="paletteModule" key={module.id}>
+            <div className="paletteModuleRow" draggable={!busy} onDragStart={event => beginDrag(event, { kind: 'module', moduleId: module.id })}>
+              <button onClick={event => { event.stopPropagation(); toggle(moduleKey); }}>{expanded.has(moduleKey) ? '⌄' : '›'}</button>
+              <span>{module.icon}</span>
+              <div className="paletteNodeText"><strong>{module.name}</strong><small>{module.sections.length} avsnitt · {taskCount} moment · {activityCount} aktiviteter</small></div>
+            </div>
+            {expanded.has(moduleKey) && <div className="paletteSections">
+              {module.sections.map(section => {
+                const sectionKey = `section:${module.id}:${section.name}`;
+                const sectionActivities = section.tasks.reduce((sum, task) => sum + task.activities.length, 0);
+                return <div className="paletteSectionGroup" key={section.name}>
+                  <div className="paletteSection" draggable={!busy} onDragStart={event => beginDrag(event, { kind: 'section', moduleId: module.id, sectionName: section.name })}>
+                    <button onClick={event => { event.stopPropagation(); toggle(sectionKey); }}>{expanded.has(sectionKey) ? '⌄' : '›'}</button>
+                    <span className="paletteNodeIcon">⌖</span>
+                    <div className="paletteNodeText"><span>{section.name}</span><small>{section.tasks.length} moment · {sectionActivities} aktiviteter</small></div>
+                  </div>
+                  {expanded.has(sectionKey) && <div className="paletteTasks">
+                    {section.tasks.map(task => {
+                      const taskKey = `task:${module.id}:${section.name}:${task.title}`;
+                      return <div className="paletteTaskGroup" key={task.title}>
+                        <div className="paletteTask">
+                          <button onClick={() => toggle(taskKey)}>{expanded.has(taskKey) ? '⌄' : '›'}</button>
+                          <span className="paletteNodeIcon">▣</span>
+                          <div className="paletteNodeText"><span>{task.title}</span><small>{task.activities.length} aktiviteter</small></div>
+                        </div>
+                        {expanded.has(taskKey) && <div className="paletteActivities">
+                          {task.activities.map(activity => <div className={`paletteActivity type-${activity.type}`} key={`${activity.title}:${activity.type}`}>
+                            <span className="activityTypeIcon" title={activity.type}>{ACTIVITY_ICONS[activity.type]}</span>
+                            <span>{activity.title}</span>
+                          </div>)}
+                        </div>}
+                      </div>;
+                    })}
+                  </div>}
+                </div>;
+              })}
+            </div>}
+          </div>;
+        })}
       </div>
       {notice && <div className="paletteNotice">{notice}</div>}
     </aside>
-    <div className={`projectDropSurface ${dropTarget ? 'dragActive' : ''}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDropTarget('active'); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropTarget(''); }} onDrop={event => void handleDrop(event)}>
+
+    <div
+      className={`projectDropSurface ${dropTarget ? 'dragActive' : ''}`}
+      onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDropTarget(true); }}
+      onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDropTarget(false); }}
+      onDrop={event => void handleDrop(event)}
+    >
       {dropTarget && <div className="dropOverlay">Släpp i projektträdet</div>}
       <App key={projectRevision} />
     </div>
