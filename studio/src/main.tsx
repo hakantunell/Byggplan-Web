@@ -1,8 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { App } from './App';
+import { StudioWorkspace } from './StudioWorkspace';
 import './styles.css';
+import './palette.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><App /></React.StrictMode>
+  <React.StrictMode><StudioWorkspace /></React.StrictMode>
 );
