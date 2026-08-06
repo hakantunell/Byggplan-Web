@@ -7,6 +7,7 @@ import './responsive.css';
 import './layout-fixes.css';
 import './uploads.css';
 import './demo-profile.css';
+import './supervisor.css';
 
 installDemoFetchIdentity();
 
