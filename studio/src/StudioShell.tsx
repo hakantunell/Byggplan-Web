@@ -1,37 +1,54 @@
 import { useEffect, useState } from 'react';
 import { StudioWorkspace } from './StudioWorkspace';
 import { GoverningDocumentsWorkspace } from './GoverningDocumentsWorkspace';
+import { MasterProjectsView } from './MasterProjectsView';
 
-type StudioView = 'project' | 'governing-documents';
+type StudioView = 'project' | 'governing-documents' | 'master-projects';
 type Project = { id: string; name: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
 
-function ProjectRailBridge({ onOpenGoverningDocuments }: { onOpenGoverningDocuments: () => void }) {
+function ProjectRailBridge({ onOpenGoverningDocuments, onOpenMasterProjects }: { onOpenGoverningDocuments: () => void; onOpenMasterProjects: () => void }) {
   useEffect(() => {
-    let button: HTMLButtonElement | null = null;
+    let governingButton: HTMLButtonElement | null = null;
+    let masterButton: HTMLButtonElement | null = null;
     let timer = 0;
 
     const connect = () => {
       const rail = document.querySelector('.studio .rail');
-      button = rail ? (rail.querySelectorAll('button')[1] as HTMLButtonElement | undefined) || null : null;
-      if (!button) {
+      const buttons = rail ? rail.querySelectorAll('button') : [];
+      governingButton = (buttons[1] as HTMLButtonElement | undefined) || null;
+      masterButton = (buttons[2] as HTMLButtonElement | undefined) || null;
+      if (!governingButton) {
         timer = window.setTimeout(connect, 50);
         return;
       }
-      button.disabled = false;
-      button.title = 'Öppna styrande dokument';
-      const label = button.querySelector('span');
-      if (label) label.textContent = 'Styrdokument';
-      button.addEventListener('click', onOpenGoverningDocuments);
+      governingButton.disabled = false;
+      governingButton.title = 'Öppna styrande dokument';
+      const governingLabel = governingButton.querySelector('span');
+      if (governingLabel) governingLabel.textContent = 'Styrdokument';
+      governingButton.addEventListener('click', onOpenGoverningDocuments);
+
+      if (masterButton) {
+        masterButton.disabled = false;
+        masterButton.title = 'Öppna masterprojekt';
+        masterButton.textContent = '';
+        const icon = document.createElement('span');
+        icon.textContent = '🏠';
+        const label = document.createElement('span');
+        label.textContent = 'Masterprojekt';
+        masterButton.append(icon, label);
+        masterButton.addEventListener('click', onOpenMasterProjects);
+      }
     };
 
     connect();
     return () => {
       window.clearTimeout(timer);
-      button?.removeEventListener('click', onOpenGoverningDocuments);
+      governingButton?.removeEventListener('click', onOpenGoverningDocuments);
+      masterButton?.removeEventListener('click', onOpenMasterProjects);
     };
-  }, [onOpenGoverningDocuments]);
+  }, [onOpenGoverningDocuments, onOpenMasterProjects]);
 
   return null;
 }
@@ -58,31 +75,33 @@ export function StudioShell() {
   if (view === 'project') {
     return <div className="studioShell view-project">
       <StudioWorkspace />
-      <ProjectRailBridge onOpenGoverningDocuments={() => setView('governing-documents')} />
+      <ProjectRailBridge onOpenGoverningDocuments={() => setView('governing-documents')} onOpenMasterProjects={() => setView('master-projects')} />
     </div>;
   }
 
   const currentProject = projects.find(project => project.id === projectId);
+  const masterView = view === 'master-projects';
 
-  return <div className="studioShell view-control-plan view-governing-documents">
+  return <div className={`studioShell view-control-plan ${masterView ? 'view-master-projects' : 'view-governing-documents'}`}>
     <div className="controlPlanStudioFrame">
       <header className="topbar controlPlanTopbar">
-        <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>Projekteditor</small></div></div>
-        <select value={projectId} onChange={event => setProjectId(event.target.value)}>
+        <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>{masterView ? 'Masterprojekt' : 'Projekteditor'}</small></div></div>
+        {!masterView && <select value={projectId} onChange={event => setProjectId(event.target.value)}>
           {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
-        </select>
+        </select>}
+        {masterView && <div className="masterTopbarLabel">Bibliotek</div>}
         <div className="connection ready">● Ansluten</div>
       </header>
 
       <aside className="rail controlPlanRail">
         <button type="button" title="Projekt" onClick={() => setView('project')}>🌳<span>Projekt</span></button>
-        <button type="button" className="active" title="Styrande dokument">📚<span>Styrdokument</span></button>
-        <button type="button" disabled title="Dokument">📄<span>Dokument</span></button>
+        <button type="button" className={view === 'governing-documents' ? 'active' : ''} title="Styrande dokument" onClick={() => setView('governing-documents')}>📚<span>Styrdokument</span></button>
+        <button type="button" className={masterView ? 'active' : ''} title="Masterprojekt" onClick={() => setView('master-projects')}>🏠<span>Masterprojekt</span></button>
         <button type="button" disabled title="Användare">👥<span>Användare</span></button>
       </aside>
 
-      <section className="controlPlanMainRegion" aria-label={`Styrande dokument för ${currentProject?.name || 'projektet'}`}>
-        {projectId ? <GoverningDocumentsWorkspace projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
+      <section className="controlPlanMainRegion" aria-label={masterView ? 'Masterprojekt' : `Styrande dokument för ${currentProject?.name || 'projektet'}`}>
+        {masterView ? <MasterProjectsView /> : projectId ? <GoverningDocumentsWorkspace projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
       </section>
     </div>
   </div>;
