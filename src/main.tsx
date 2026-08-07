@@ -8,6 +8,7 @@ import './layout-fixes.css';
 import './uploads.css';
 import './demo-profile.css';
 import './supervisor.css';
+import './navigation.css';
 
 installDemoFetchIdentity();
 
