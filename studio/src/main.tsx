@@ -11,6 +11,7 @@ import './governing-verification-lock.css';
 import './governing-mapping.css';
 import './governing-mapping-exception.css';
 import './studio-shell.css';
+import './master-projects.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
