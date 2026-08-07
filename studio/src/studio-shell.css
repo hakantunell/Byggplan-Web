@@ -3,60 +3,10 @@ body{overflow-x:hidden}
 
 .studioShell{min-height:100vh;min-width:0}
 
-/* The project editor already reserves the left rail. The shared shell owns the visible menu. */
-.studioShell.view-project .rail>button{visibility:hidden!important;pointer-events:none!important}
+/* Project view uses the original Studio rail from App.tsx. */
+.studioShell.view-project .rail{position:relative;z-index:1}
 
-/* Permanent Studio sidebar: this is the left column, not a set of floating buttons. */
-.studioPrimaryNavigation{
-  position:fixed;
-  z-index:200;
-  left:0;
-  top:64px;
-  bottom:0;
-  width:68px;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:4px;
-  padding:8px 4px 12px;
-  box-sizing:border-box;
-  overflow-y:auto;
-  overflow-x:hidden;
-  background:#17251e;
-  border-right:1px solid #2c3d34;
-}
-
-.studioPrimaryNavigation button{
-  flex:0 0 auto;
-  width:60px;
-  min-height:64px;
-  border:0;
-  border-radius:10px;
-  background:transparent;
-  color:#9dafa5;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  gap:5px;
-  cursor:pointer;
-  font-size:10px;
-  line-height:1.15;
-  padding:7px 3px;
-  box-sizing:border-box;
-}
-
-.studioPrimaryNavigation button:hover:not(:disabled),
-.studioPrimaryNavigation button.active{
-  background:#30443a;
-  color:#fff;
-}
-
-.studioPrimaryNavigation button:disabled{opacity:.38;cursor:not-allowed}
-.studioNavIcon{font-size:20px;line-height:1}
-
-/* The control-plan view is a separate application page with the same reserved menu column. */
+/* Control-plan view is a separate application page using the same rail styling. */
 .controlPlanStudioFrame{
   min-height:100vh;
   display:grid;
@@ -84,8 +34,6 @@ body{overflow-x:hidden}
   width:auto!important;
   min-height:0;
   z-index:1;
-  background:#17251e;
-  border-right:1px solid #2c3d34;
 }
 
 .controlPlanMainRegion{
@@ -144,8 +92,6 @@ body{overflow-x:hidden}
 .studioShell .controlPlanMenuButton{display:none!important}
 
 @media(max-width:900px){
-  .studioPrimaryNavigation{width:60px;padding-left:3px;padding-right:3px}
-  .studioPrimaryNavigation button{width:54px}
   .controlPlanStudioFrame{grid-template-columns:60px minmax(0,1fr)}
   .controlPlanPrimaryView{grid-template-columns:1fr}
   .controlPlanListPanel{display:none}
