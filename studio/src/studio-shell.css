@@ -7,12 +7,21 @@ body{overflow-x:hidden}
 .studioShell.view-project .rail{position:relative;z-index:1}
 .studioShell.view-project .rail>button:nth-child(2){display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
 
+/* Control-plan mode occupies exactly the viewport. The page itself must not grow/scroll. */
+.studioShell.view-control-plan{
+  height:100vh;
+  height:100dvh;
+  min-height:0;
+  overflow:hidden;
+}
+
 /* Control-plan view is a separate application page using the same rail styling. */
 .controlPlanStudioFrame{
-  min-height:100vh;
+  height:100%;
+  min-height:0;
   display:grid;
   grid-template-columns:68px minmax(0,1fr);
-  grid-template-rows:64px minmax(0,1fr);
+  grid-template-rows:68px minmax(0,1fr);
   background:#eef2ef;
   overflow:hidden;
 }
@@ -24,24 +33,38 @@ body{overflow-x:hidden}
   grid-row:1;
   width:auto!important;
   min-width:0;
+  min-height:0;
   z-index:2;
 }
 
+/* This is the normal left rail in control-plan mode, never an overlay. */
 .controlPlanRail{
   position:relative!important;
   inset:auto!important;
   grid-column:1;
   grid-row:2;
   width:auto!important;
+  min-width:0;
   min-height:0;
+  height:100%;
   z-index:1;
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden;
 }
+.controlPlanRail>button{
+  display:flex!important;
+  visibility:visible!important;
+  flex:0 0 auto;
+}
+.controlPlanRail>button:nth-child(2){opacity:1!important}
 
 .controlPlanMainRegion{
   grid-column:2;
   grid-row:2;
   min-width:0;
   min-height:0;
+  height:100%;
   overflow:hidden;
 }
 
@@ -52,12 +75,15 @@ body{overflow-x:hidden}
   display:grid;
   grid-template-columns:280px minmax(0,1fr);
   background:#eef2ef;
+  overflow:hidden;
 }
 
 .controlPlanListPanel{
   min-width:0;
   min-height:0;
+  height:100%;
   overflow:auto;
+  overscroll-behavior:contain;
   background:#f8faf9;
   border-right:1px solid #d5ddd8;
 }
@@ -71,10 +97,15 @@ body{overflow-x:hidden}
 .controlPlanList button small{color:#74827a}
 .controlPlanList p{padding:10px;color:#74827a;font-size:12px}
 
+/* Only this pane scrolls vertically. Topbar and rail remain fixed in the grid. */
 .controlPlanContent{
   min-width:0;
   min-height:0;
-  overflow:auto;
+  height:100%;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
   padding:24px 28px 70px;
   box-sizing:border-box;
 }
