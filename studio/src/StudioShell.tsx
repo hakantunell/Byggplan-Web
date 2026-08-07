@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StudioWorkspace } from './StudioWorkspace';
-import { GoverningDocumentsView } from './GoverningDocumentsView';
+import { GoverningDocumentsWorkspace } from './GoverningDocumentsWorkspace';
 
 type StudioView = 'project' | 'governing-documents';
 type Project = { id: string; name: string };
@@ -15,12 +15,10 @@ function ProjectRailBridge({ onOpenGoverningDocuments }: { onOpenGoverningDocume
     const connect = () => {
       const rail = document.querySelector('.studio .rail');
       button = rail ? (rail.querySelectorAll('button')[1] as HTMLButtonElement | undefined) || null : null;
-
       if (!button) {
         timer = window.setTimeout(connect, 50);
         return;
       }
-
       button.disabled = false;
       button.title = 'Öppna styrande dokument';
       const label = button.querySelector('span');
@@ -84,7 +82,7 @@ export function StudioShell() {
       </aside>
 
       <section className="controlPlanMainRegion" aria-label={`Styrande dokument för ${currentProject?.name || 'projektet'}`}>
-        {projectId ? <GoverningDocumentsView projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
+        {projectId ? <GoverningDocumentsWorkspace projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
       </section>
     </div>
   </div>;
