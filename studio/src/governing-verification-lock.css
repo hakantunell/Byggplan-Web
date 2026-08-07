@@ -1,0 +1,12 @@
+.governingItem:has(.governingStatus.status-waiting_activity) .governingVerificationSteps button,
+.governingItem:has(.governingStatus.status-in_progress) .governingVerificationSteps button{
+  pointer-events:none;
+  opacity:.38;
+  cursor:not-allowed;
+  filter:grayscale(.5);
+}
+
+.governingItem:has(.governingStatus.status-waiting_activity) .governingVerificationSteps .verification-pending:has(button) small::after,
+.governingItem:has(.governingStatus.status-in_progress) .governingVerificationSteps .verification-pending:has(button) small::after{
+  content:' · Låst tills aktiviteterna är klara';
+}
