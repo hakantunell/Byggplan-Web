@@ -62,6 +62,7 @@ export function ControlPlanView({ projectId }: Props) {
     setSelectedId('');
     setDetail(null);
     setPoints([]);
+    setCollapsedCategories(new Set());
     void loadPlans();
   }, [projectId]);
 
@@ -96,6 +97,7 @@ export function ControlPlanView({ projectId }: Props) {
       if (!next.length) {
         setDetail(null);
         setPoints([]);
+        setCollapsedCategories(new Set());
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte hämta kontrollplaner.');
@@ -110,8 +112,16 @@ export function ControlPlanView({ projectId }: Props) {
       const response = await fetch(`${API_BASE}/api/studio/control-plans/${encodeURIComponent(id)}`, { cache: 'no-store' });
       const data = await response.json().catch(() => ({})) as { controlPlan?: ControlPlanDetail; points?: ControlPlanPoint[]; error?: string };
       if (!response.ok) throw new Error(data.error || 'Kunde inte läsa kontrollplanen.');
+      const nextPoints = data.points || [];
       setDetail(data.controlPlan || null);
-      setPoints(data.points || []);
+      setPoints(nextPoints);
+
+      const categoryKeys = new Set(nextPoints.map(point => {
+        const code = point.category_code || 'Ö';
+        const title = point.category_title || 'Övriga kontrollpunkter';
+        return `${code}:${title}`;
+      }));
+      setCollapsedCategories(categoryKeys);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte läsa kontrollplanen.');
     } finally {
