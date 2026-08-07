@@ -6,6 +6,7 @@ import './palette.css';
 import './classifications.css';
 import './control-plan.css';
 import './governing-documents.css';
+import './governing-verifications.css';
 import './studio-shell.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
