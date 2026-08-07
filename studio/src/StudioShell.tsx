@@ -1,22 +1,20 @@
 import { useEffect, useState } from 'react';
 import { StudioWorkspace } from './StudioWorkspace';
-import { ControlPlanView } from './ControlPlanView';
+import { GoverningDocumentsView } from './GoverningDocumentsView';
 
-type StudioView = 'project' | 'control-plan';
+type StudioView = 'project' | 'governing-documents';
 type Project = { id: string; name: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
 
-function ProjectRailBridge({ onOpenControlPlan }: { onOpenControlPlan: () => void }) {
+function ProjectRailBridge({ onOpenGoverningDocuments }: { onOpenGoverningDocuments: () => void }) {
   useEffect(() => {
     let button: HTMLButtonElement | null = null;
     let timer = 0;
 
     const connect = () => {
       const rail = document.querySelector('.studio .rail');
-      button = rail
-        ? (Array.from(rail.querySelectorAll('button')).find(item => item.textContent?.includes('Kontrollplan')) as HTMLButtonElement | undefined) || null
-        : null;
+      button = rail ? (rail.querySelectorAll('button')[1] as HTMLButtonElement | undefined) || null : null;
 
       if (!button) {
         timer = window.setTimeout(connect, 50);
@@ -24,16 +22,18 @@ function ProjectRailBridge({ onOpenControlPlan }: { onOpenControlPlan: () => voi
       }
 
       button.disabled = false;
-      button.title = 'Öppna kontrollplan';
-      button.addEventListener('click', onOpenControlPlan);
+      button.title = 'Öppna styrande dokument';
+      const label = button.querySelector('span');
+      if (label) label.textContent = 'Styrdokument';
+      button.addEventListener('click', onOpenGoverningDocuments);
     };
 
     connect();
     return () => {
       window.clearTimeout(timer);
-      button?.removeEventListener('click', onOpenControlPlan);
+      button?.removeEventListener('click', onOpenGoverningDocuments);
     };
-  }, [onOpenControlPlan]);
+  }, [onOpenGoverningDocuments]);
 
   return null;
 }
@@ -60,13 +60,13 @@ export function StudioShell() {
   if (view === 'project') {
     return <div className="studioShell view-project">
       <StudioWorkspace />
-      <ProjectRailBridge onOpenControlPlan={() => setView('control-plan')} />
+      <ProjectRailBridge onOpenGoverningDocuments={() => setView('governing-documents')} />
     </div>;
   }
 
   const currentProject = projects.find(project => project.id === projectId);
 
-  return <div className="studioShell view-control-plan">
+  return <div className="studioShell view-control-plan view-governing-documents">
     <div className="controlPlanStudioFrame">
       <header className="topbar controlPlanTopbar">
         <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>Projekteditor</small></div></div>
@@ -78,13 +78,13 @@ export function StudioShell() {
 
       <aside className="rail controlPlanRail">
         <button type="button" title="Projekt" onClick={() => setView('project')}>🌳<span>Projekt</span></button>
-        <button type="button" className="active" title="Kontrollplan">📋<span>Kontrollplan</span></button>
+        <button type="button" className="active" title="Styrande dokument">📚<span>Styrdokument</span></button>
         <button type="button" disabled title="Dokument">📄<span>Dokument</span></button>
         <button type="button" disabled title="Användare">👥<span>Användare</span></button>
       </aside>
 
-      <section className="controlPlanMainRegion" aria-label={`Kontrollplan för ${currentProject?.name || 'projektet'}`}>
-        {projectId ? <ControlPlanView projectId={projectId} /> : <div className="empty"><span>📋</span><h2>Inget projekt valt</h2></div>}
+      <section className="controlPlanMainRegion" aria-label={`Styrande dokument för ${currentProject?.name || 'projektet'}`}>
+        {projectId ? <GoverningDocumentsView projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
       </section>
     </div>
   </div>;
