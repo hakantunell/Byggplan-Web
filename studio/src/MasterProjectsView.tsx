@@ -26,17 +26,22 @@ type TreeResponse = {
   activities: Activity[];
 };
 
+type Props = { onProjectCreated?: (projectId:string) => void };
+
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||'https://api.byggplan.tunell.org').replace(/\/$/,'');
 const ACTIVITY_LABELS:Record<string,string>={perform:'Utför',document:'Dokumentera',measurement:'Mät',check:'Kontrollera',approval:'Godkänn',note:'Kom ihåg',choice:'Välj'};
 const ACTIVITY_ICONS:Record<string,string>={perform:'●',document:'📷',measurement:'📏',check:'✓',approval:'✍',note:'📝',choice:'◉'};
 
-export function MasterProjectsView(){
+export function MasterProjectsView({onProjectCreated}:Props){
   const[projects,setProjects]=useState<MasterProjectSummary[]>([]);
   const[selectedId,setSelectedId]=useState('');
   const[tree,setTree]=useState<TreeResponse|null>(null);
   const[expanded,setExpanded]=useState<Set<string>>(new Set());
   const[loading,setLoading]=useState(false);
   const[message,setMessage]=useState('');
+  const[createOpen,setCreateOpen]=useState(false);
+  const[projectName,setProjectName]=useState('');
+  const[propertyDesignation,setPropertyDesignation]=useState('');
 
   async function loadProjects(selectId?:string){
     setLoading(true);
@@ -46,7 +51,11 @@ export function MasterProjectsView(){
       if(!response.ok)throw new Error(data.error||'Kunde inte läsa masterprojekt.');
       const next=data.masterProjects||[];
       setProjects(next);
-      setSelectedId(current=>selectId||current&&next.some(item=>item.id===current)?(selectId||current):(next[0]?.id||''));
+      setSelectedId(current=>{
+        if(selectId&&next.some(item=>item.id===selectId))return selectId;
+        if(current&&next.some(item=>item.id===current))return current;
+        return next[0]?.id||'';
+      });
       if(!next.length)setTree(null);
     }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte läsa masterprojekt.');}
     finally{setLoading(false);}
@@ -89,6 +98,32 @@ export function MasterProjectsView(){
     finally{setLoading(false);}
   }
 
+  function openCreate(){
+    setProjectName('');
+    setPropertyDesignation('');
+    setMessage('');
+    setCreateOpen(true);
+  }
+
+  async function createProject(){
+    if(!selected||!projectName.trim())return;
+    setLoading(true);
+    setMessage('Skapar projektkopia från masterprojektet…');
+    try{
+      const response=await fetch(`${API_BASE}/api/studio/master-projects/${encodeURIComponent(selected.id)}/create-project`,{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:projectName.trim(),propertyDesignation:propertyDesignation.trim()})
+      });
+      const data=await response.json().catch(()=>({})) as {project?:{id:string;name:string};created?:{areas:number;sections:number;tasks:number;activities:number};error?:string};
+      if(!response.ok)throw new Error(data.error||'Projektet kunde inte skapas.');
+      if(!data.project?.id)throw new Error('Projektet skapades men inget projekt-ID returnerades.');
+      const created=data.created;
+      setMessage(`Projektet ”${data.project.name}” skapades${created?` · ${created.areas} områden · ${created.tasks} moment · ${created.activities} aktiviteter`:''}.`);
+      setCreateOpen(false);
+      onProjectCreated?.(data.project.id);
+    }catch(error){setMessage(error instanceof Error?error.message:'Projektet kunde inte skapas.');}
+    finally{setLoading(false);}
+  }
+
   return <div className="masterProjectsView">
     <aside className="masterProjectList">
       <div className="masterProjectListHeader"><small>MASTERPROJEKT</small><strong>Projektmallar</strong><p>Återanvändbara byggprocesser som lagras i databasen.</p></div>
@@ -102,8 +137,9 @@ export function MasterProjectsView(){
 
     <main className="masterProjectContent">
       {selected&&tree?<>
-        <header className="masterProjectHeader"><div><small>MASTERPROJEKT · {selected.status.toUpperCase()}</small><h1>{selected.name}</h1><p>{selected.description}</p></div><div className="masterProjectStats"><span><b>{selected.area_count}</b><small>områden</small></span><span><b>{selected.section_count}</b><small>avsnitt</small></span><span><b>{selected.task_count}</b><small>moment</small></span><span><b>{selected.activity_count}</b><small>aktiviteter</small></span></div></header>
+        <header className="masterProjectHeader"><div><small>MASTERPROJEKT · {selected.status.toUpperCase()}</small><h1>{selected.name}</h1><p>{selected.description}</p></div><div className="masterProjectHeaderRight"><div className="masterProjectStats"><span><b>{selected.area_count}</b><small>områden</small></span><span><b>{selected.section_count}</b><small>avsnitt</small></span><span><b>{selected.task_count}</b><small>moment</small></span><span><b>{selected.activity_count}</b><small>aktiviteter</small></span></div><button className="masterCreateProjectButton" onClick={openCreate}>＋ Skapa projekt från masterprojekt</button></div></header>
         {message&&<div className="masterMessage">{message}</div>}
+        {createOpen&&<section className="masterCreatePanel"><div><small>NY PROJEKTKOPIA</small><h2>Skapa projekt från {selected.name}</h2><p>Projektet blir en fristående snapshot av version {selected.version}. Senare ändringar i masterprojektet ändrar inte projektet automatiskt.</p></div><div className="masterCreateFields"><label><span>Projektnamn</span><input autoFocus value={projectName} onChange={event=>setProjectName(event.target.value)} placeholder="Ex. Vemdalens Kyrkby 44:10" /></label><label><span>Fastighetsbeteckning</span><input value={propertyDesignation} onChange={event=>setPropertyDesignation(event.target.value)} placeholder="Valfritt" /></label><div className="masterCreateActions"><button onClick={()=>setCreateOpen(false)} disabled={loading}>Avbryt</button><button className="primary" onClick={()=>void createProject()} disabled={loading||!projectName.trim()}>{loading?'Skapar…':'Skapa projekt'}</button></div></div></section>}
         <div className="masterTree">{tree.areas.map(area=>{
           const areaKey=`area:${area.id}`;const areaOpen=expanded.has(areaKey);const sections=sectionsByArea.get(area.id)||[];
           return <section className="masterArea" key={area.id}>
