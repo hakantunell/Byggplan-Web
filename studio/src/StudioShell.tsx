@@ -59,18 +59,38 @@ export function StudioShell() {
   const [projectId, setProjectId] = useState('');
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/projects`, { cache: 'no-store' });
-        const data = await response.json() as { projects?: Project[] };
-        const next = data.projects || [];
-        setProjects(next);
-        setProjectId(current => current || next[0]?.id || '');
-      } catch {
-        setProjects([]);
-      }
-    })();
+    void loadProjects();
   }, []);
+
+  async function loadProjects(selectId?: string) {
+    try {
+      const response = await fetch(`${API_BASE}/api/projects`, { cache: 'no-store' });
+      const data = await response.json() as { projects?: Project[] };
+      const next = data.projects || [];
+      setProjects(next);
+      setProjectId(current => selectId && next.some(project => project.id === selectId) ? selectId : current || next[0]?.id || '');
+    } catch {
+      setProjects([]);
+    }
+  }
+
+  function openCreatedProject(createdProjectId: string) {
+    void loadProjects(createdProjectId);
+    setView('project');
+    let attempts = 0;
+    const selectWhenReady = () => {
+      const select = document.querySelector('.studio .topbar select') as HTMLSelectElement | null;
+      const optionExists = select ? Array.from(select.options).some(option => option.value === createdProjectId) : false;
+      if (select && optionExists) {
+        select.value = createdProjectId;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return;
+      }
+      attempts += 1;
+      if (attempts < 50) window.setTimeout(selectWhenReady, 100);
+    };
+    window.setTimeout(selectWhenReady, 50);
+  }
 
   if (view === 'project') {
     return <div className="studioShell view-project">
@@ -101,7 +121,7 @@ export function StudioShell() {
       </aside>
 
       <section className="controlPlanMainRegion" aria-label={masterView ? 'Masterprojekt' : `Styrande dokument för ${currentProject?.name || 'projektet'}`}>
-        {masterView ? <MasterProjectsView /> : projectId ? <GoverningDocumentsWorkspace projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
+        {masterView ? <MasterProjectsView onProjectCreated={openCreatedProject} /> : projectId ? <GoverningDocumentsWorkspace projectId={projectId} /> : <div className="empty"><span>📚</span><h2>Inget projekt valt</h2></div>}
       </section>
     </div>
   </div>;
