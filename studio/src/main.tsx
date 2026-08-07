@@ -9,6 +9,7 @@ import './governing-documents.css';
 import './governing-verifications.css';
 import './governing-verification-lock.css';
 import './governing-mapping.css';
+import './governing-mapping-exception.css';
 import './studio-shell.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
