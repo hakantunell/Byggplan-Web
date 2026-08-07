@@ -7,6 +7,37 @@ type Project = { id: string; name: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
 
+function ProjectRailBridge({ onOpenControlPlan }: { onOpenControlPlan: () => void }) {
+  useEffect(() => {
+    let button: HTMLButtonElement | null = null;
+    let timer = 0;
+
+    const connect = () => {
+      const rail = document.querySelector('.studio .rail');
+      button = rail
+        ? (Array.from(rail.querySelectorAll('button')).find(item => item.textContent?.includes('Kontrollplan')) as HTMLButtonElement | undefined) || null
+        : null;
+
+      if (!button) {
+        timer = window.setTimeout(connect, 50);
+        return;
+      }
+
+      button.disabled = false;
+      button.title = 'Öppna kontrollplan';
+      button.addEventListener('click', onOpenControlPlan);
+    };
+
+    connect();
+    return () => {
+      window.clearTimeout(timer);
+      button?.removeEventListener('click', onOpenControlPlan);
+    };
+  }, [onOpenControlPlan]);
+
+  return null;
+}
+
 export function StudioShell() {
   const [view, setView] = useState<StudioView>('project');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -26,10 +57,17 @@ export function StudioShell() {
     })();
   }, []);
 
+  if (view === 'project') {
+    return <div className="studioShell view-project">
+      <StudioWorkspace />
+      <ProjectRailBridge onOpenControlPlan={() => setView('control-plan')} />
+    </div>;
+  }
+
   const currentProject = projects.find(project => project.id === projectId);
 
-  return <div className={`studioShell view-${view}`}>
-    {view === 'project' ? <StudioWorkspace /> : <div className="controlPlanStudioFrame">
+  return <div className="studioShell view-control-plan">
+    <div className="controlPlanStudioFrame">
       <header className="topbar controlPlanTopbar">
         <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>Projekteditor</small></div></div>
         <select value={projectId} onChange={event => setProjectId(event.target.value)}>
@@ -38,26 +76,16 @@ export function StudioShell() {
         <div className="connection ready">● Ansluten</div>
       </header>
 
-      <aside className="rail controlPlanRail" aria-hidden="true" />
+      <aside className="rail controlPlanRail">
+        <button type="button" title="Projekt" onClick={() => setView('project')}>🌳<span>Projekt</span></button>
+        <button type="button" className="active" title="Kontrollplan">📋<span>Kontrollplan</span></button>
+        <button type="button" disabled title="Dokument">📄<span>Dokument</span></button>
+        <button type="button" disabled title="Användare">👥<span>Användare</span></button>
+      </aside>
 
       <section className="controlPlanMainRegion" aria-label={`Kontrollplan för ${currentProject?.name || 'projektet'}`}>
         {projectId ? <ControlPlanView projectId={projectId} /> : <div className="empty"><span>📋</span><h2>Inget projekt valt</h2></div>}
       </section>
-    </div>}
-
-    <nav className="studioPrimaryNavigation" aria-label="Huvudmeny">
-      <button type="button" className={view === 'project' ? 'active' : ''} onClick={() => setView('project')} title="Projekt">
-        <span className="studioNavIcon">🌳</span><span>Projekt</span>
-      </button>
-      <button type="button" className={view === 'control-plan' ? 'active' : ''} onClick={() => setView('control-plan')} title="Kontrollplan">
-        <span className="studioNavIcon">📋</span><span>Kontrollplan</span>
-      </button>
-      <button type="button" disabled title="Dokument">
-        <span className="studioNavIcon">📄</span><span>Dokument</span>
-      </button>
-      <button type="button" disabled title="Användare">
-        <span className="studioNavIcon">👥</span><span>Användare</span>
-      </button>
-    </nav>
+    </div>
   </div>;
 }
