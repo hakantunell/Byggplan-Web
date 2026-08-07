@@ -40,6 +40,22 @@ type GoverningItem = {
   linked_activity_count: number;
 };
 
+type VerificationStep = {
+  id: string;
+  governing_item_id: string;
+  role_code: string;
+  required: number;
+  status: string;
+  comment: string;
+  verified_at?: string | null;
+};
+
+type SourceInfo = {
+  id: string;
+  source_basis: string;
+  source_note: string;
+};
+
 type ActivityLink = {
   id: string;
   title: string;
@@ -83,11 +99,20 @@ const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   other: 'Styrande dokument'
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  builder: 'Byggherre / egenkontroll',
+  ka: 'KA',
+  authority: 'Myndighet',
+  external: 'Extern sakkunnig'
+};
+
 export function GoverningDocumentsView({ projectId }: Props) {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [detail, setDetail] = useState<GoverningDocument | null>(null);
   const [items, setItems] = useState<GoverningItem[]>([]);
+  const [verifications, setVerifications] = useState<Record<string, VerificationStep[]>>({});
+  const [sourceInfo, setSourceInfo] = useState<Record<string, SourceInfo>>({});
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +124,8 @@ export function GoverningDocumentsView({ projectId }: Props) {
     setSelectedId('');
     setDetail(null);
     setItems([]);
+    setVerifications({});
+    setSourceInfo({});
     void loadDocuments();
   }, [projectId]);
 
@@ -144,12 +171,27 @@ export function GoverningDocumentsView({ projectId }: Props) {
   async function loadDocument(id: string) {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}`, { cache: 'no-store' });
-      const data = await response.json().catch(() => ({})) as { document?: GoverningDocument; items?: GoverningItem[]; error?: string };
-      if (!response.ok) throw new Error(data.error || 'Kunde inte läsa det styrande dokumentet.');
+      const [documentResponse, verificationResponse] = await Promise.all([
+        fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}/verification-map`, { cache: 'no-store' })
+      ]);
+      const data = await documentResponse.json().catch(() => ({})) as { document?: GoverningDocument; items?: GoverningItem[]; error?: string };
+      const verificationData = await verificationResponse.json().catch(() => ({})) as { verifications?: VerificationStep[]; source?: SourceInfo[]; error?: string };
+      if (!documentResponse.ok) throw new Error(data.error || 'Kunde inte läsa det styrande dokumentet.');
+      if (!verificationResponse.ok) throw new Error(verificationData.error || 'Kunde inte läsa verifieringsflödet.');
+
       const nextItems = data.items || [];
+      const verificationMap: Record<string, VerificationStep[]> = {};
+      for (const step of verificationData.verifications || []) {
+        (verificationMap[step.governing_item_id] ||= []).push(step);
+      }
+      const sourceMap: Record<string, SourceInfo> = {};
+      for (const source of verificationData.source || []) sourceMap[source.id] = source;
+
       setDetail(data.document || null);
       setItems(nextItems);
+      setVerifications(verificationMap);
+      setSourceInfo(sourceMap);
       const sections = new Set(nextItems.map(item => `${item.section_code || 'Ö'}:${item.section_title || 'Övriga poster'}`));
       setCollapsedSections(sections);
       setLinkItemId('');
@@ -197,6 +239,22 @@ export function GoverningDocumentsView({ projectId }: Props) {
       await loadDocuments();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte spara posten.');
+    }
+  }
+
+  async function updateVerification(item: GoverningItem, step: VerificationStep, status: string) {
+    try {
+      const response = await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}/verifications/${encodeURIComponent(step.role_code)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, comment: step.comment || '' })
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || 'Kunde inte spara verifieringen.');
+      setMessage(status === 'verified' ? `${ROLE_LABELS[step.role_code] || step.role_code} har verifierat posten.` : 'Verifieringen återställdes.');
+      await loadDocument(selectedId);
+      await loadDocuments();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Kunde inte spara verifieringen.');
     }
   }
 
@@ -281,27 +339,47 @@ export function GoverningDocumentsView({ projectId }: Props) {
               <button className="governingSectionHeader" onClick={() => toggleSection(group.key)}>
                 <span>{collapsed ? '›' : '⌄'}</span><b>{group.code}</b><strong>{group.title}</strong><small>{group.items.length} poster</small>
               </button>
-              {!collapsed && <div className="governingItems">{group.items.map(item => <article className="governingItem" key={item.id}>
-                <div className="governingItemTop">
-                  <div><span className="pointTypeBadge">{ITEM_TYPE_LABELS[item.item_type] || 'Styrande post'}</span><h3>{item.code} {item.description}</h3></div>
-                  <span className={`governingStatus status-${item.handling_status}`}>{STATUS_LABELS[item.handling_status] || item.handling_status}</span>
-                </div>
-                {(item.responsible_role || item.evidence_required) && <p className="governingMeta">{[item.responsible_role, item.evidence_required].filter(Boolean).join(' · ')}</p>}
-                <div className="governingItemControls">
-                  <label><span>Hantering</span><select value={item.handling_status} onChange={event => void updateItem(item, event.target.value, item.handling_comment || '')}>
-                    {Object.entries(STATUS_LABELS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
-                  </select></label>
-                  <label className="governingComment"><span>Kommentar</span><textarea value={item.handling_comment || ''} onChange={event => setItems(current => current.map(value => value.id === item.id ? { ...value, handling_comment: event.target.value } : value))} onBlur={event => void updateItem(item, item.handling_status, event.target.value)} placeholder="Kommentar, avvikelse eller förklaring…" /></label>
-                </div>
-                <div className="governingLinksHeader"><button onClick={() => void openActivityLinks(item)}>🔗 {item.linked_activity_count || 0} kopplade aktiviteter</button></div>
-                {linkItemId === item.id && <div className="governingActivityLinker">
-                  <div className="governingActivityLinkerHeader"><strong>Koppla till aktiviteter i projektet</strong><button disabled={linkBusy} onClick={() => void saveActivityLinks(item)}>Spara kopplingar</button></div>
-                  {linkBusy && !linkActivities.length ? <p>Hämtar aktiviteter…</p> : <div className="governingActivityList">{linkActivities.map(activity => <label key={activity.id}>
-                    <input type="checkbox" checked={Boolean(activity.linked)} onChange={event => setLinkActivities(current => current.map(value => value.id === activity.id ? { ...value, linked: event.target.checked ? 1 : 0 } : value))} />
-                    <span><b>{activity.title}</b><small>{activity.area_name} › {activity.section_name} › {activity.task_title}</small></span>
-                  </label>)}</div>}
-                </div>}
-              </article>)}</div>}
+              {!collapsed && <div className="governingItems">{group.items.map(item => {
+                const steps = verifications[item.id] || [];
+                const source = sourceInfo[item.id];
+                return <article className="governingItem" key={item.id}>
+                  <div className="governingItemTop">
+                    <div><span className="pointTypeBadge">{ITEM_TYPE_LABELS[item.item_type] || 'Styrande post'}</span><h3>{item.code} {item.description}</h3></div>
+                    <span className={`governingStatus status-${item.handling_status}`}>{STATUS_LABELS[item.handling_status] || item.handling_status}</span>
+                  </div>
+
+                  {(source?.source_basis || item.responsible_role || source?.source_note || item.evidence_required) && <div className="governingSourceFacts">
+                    {source?.source_basis && <div><b>Utfört enligt</b><span>{source.source_basis}</span></div>}
+                    {item.responsible_role && <div><b>Egenkontr/alt KA</b><span>{item.responsible_role}</span></div>}
+                    {source?.source_note && <div><b>Anteckningar</b><span>{source.source_note}</span></div>}
+                    {!source?.source_note && item.evidence_required && <div><b>Underlag</b><span>{item.evidence_required}</span></div>}
+                  </div>}
+
+                  <div className="governingVerification">
+                    <div className="governingVerificationHeading"><b>Verifiering</b><small>{steps.length ? `${steps.filter(step => step.status === 'verified').length}/${steps.length} klara` : 'Inget verifieringssteg angivet'}</small></div>
+                    {!!steps.length && <div className="governingVerificationSteps">{steps.map(step => <div className={`verificationStep verification-${step.status}`} key={step.id}>
+                      <span className="verificationMark">{step.status === 'verified' ? '✓' : step.status === 'rejected' ? '!' : '○'}</span>
+                      <div><b>{ROLE_LABELS[step.role_code] || step.role_code}</b><small>{step.status === 'verified' ? 'Verifierad' : step.status === 'rejected' ? 'Avvisad' : 'Väntar på verifiering'}</small></div>
+                      <button onClick={() => void updateVerification(item, step, step.status === 'verified' ? 'pending' : 'verified')}>{step.status === 'verified' ? 'Återställ' : 'Verifiera'}</button>
+                    </div>)}</div>}
+                  </div>
+
+                  <div className="governingItemControls">
+                    <label><span>Hantering / undantag</span><select value={item.handling_status} onChange={event => void updateItem(item, event.target.value, item.handling_comment || '')}>
+                      {Object.entries(STATUS_LABELS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+                    </select></label>
+                    <label className="governingComment"><span>Kommentar</span><textarea value={item.handling_comment || ''} onChange={event => setItems(current => current.map(value => value.id === item.id ? { ...value, handling_comment: event.target.value } : value))} onBlur={event => void updateItem(item, item.handling_status, event.target.value)} placeholder="Kommentar, avvikelse eller förklaring…" /></label>
+                  </div>
+                  <div className="governingLinksHeader"><button onClick={() => void openActivityLinks(item)}>🔗 {item.linked_activity_count || 0} kopplade aktiviteter</button></div>
+                  {linkItemId === item.id && <div className="governingActivityLinker">
+                    <div className="governingActivityLinkerHeader"><strong>Koppla till aktiviteter i projektet</strong><button disabled={linkBusy} onClick={() => void saveActivityLinks(item)}>Spara kopplingar</button></div>
+                    {linkBusy && !linkActivities.length ? <p>Hämtar aktiviteter…</p> : <div className="governingActivityList">{linkActivities.map(activity => <label key={activity.id}>
+                      <input type="checkbox" checked={Boolean(activity.linked)} onChange={event => setLinkActivities(current => current.map(value => value.id === activity.id ? { ...value, linked: event.target.checked ? 1 : 0 } : value))} />
+                      <span><b>{activity.title}</b><small>{activity.area_name} › {activity.section_name} › {activity.task_title}</small></span>
+                    </label>)}</div>}
+                  </div>}
+                </article>;
+              })}</div>}
             </section>;
           })}
         </div>
