@@ -66,7 +66,7 @@ export function GoverningMappingView({ projectId }: Props) {
       const mapped = Number(item.mapped_activity_count || 0) > 0;
       const exception = isException(item);
       if (filter === 'uncovered') return !mapped && !exception;
-      if (filter === 'mapped') return mapped;
+      if (filter === 'mapped') return mapped && !exception;
       if (filter === 'exceptions') return exception;
       return true;
     });
@@ -75,8 +75,9 @@ export function GoverningMappingView({ projectId }: Props) {
   async function acceptSuggestion(item: MappingItem, suggestion: Suggestion) {
     setBusyItemId(item.id); setMessage('');
     try {
-      const response = await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}/activity-links`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activityIds: [suggestion.activity_id] })
+      const response = await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}/mappings/${encodeURIComponent(suggestion.activity_id)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mappingSource: 'suggested', confidence: suggestion.confidence, comment: 'Accepterad i kartläggningsvyn' })
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error || 'Kunde inte skapa kopplingen.');
@@ -121,13 +122,13 @@ export function GoverningMappingView({ projectId }: Props) {
         const mapped = Number(item.mapped_activity_count || 0) > 0;
         const exception = isException(item);
         const suggestions = data.suggestions[item.id] || [];
-        const stateClass = mapped ? 'mapped' : exception ? 'exception' : 'unmapped';
+        const stateClass = exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
-          <div className="mappingState" title={mapped ? 'Kopplad till aktivitet' : exception ? 'Hanterad som undantag' : 'Saknar aktivitet'}>{mapped ? '✓' : exception ? '—' : '!'}</div>
+          <div className="mappingState" title={exception ? 'Hanterad som undantag' : mapped ? 'Kopplad till aktivitet' : 'Saknar aktivitet'}>{exception ? '—' : mapped ? '✓' : '!'}</div>
           <div className="mappingItemBody">
             <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
-            {mapped ? <div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>
-              : exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
+            {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
+              : mapped ? <div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>
               : suggestions.length ? <div className="mappingSuggestions"><b>Föreslagna matchningar</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
                   <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small></div>
                   <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id} onClick={() => void acceptSuggestion(item,suggestion)}>Koppla</button>
