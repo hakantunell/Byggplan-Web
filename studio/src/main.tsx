@@ -7,6 +7,7 @@ import './classifications.css';
 import './control-plan.css';
 import './governing-documents.css';
 import './governing-verifications.css';
+import './governing-verification-lock.css';
 import './studio-shell.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
