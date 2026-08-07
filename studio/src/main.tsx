@@ -5,6 +5,7 @@ import './styles.css';
 import './palette.css';
 import './classifications.css';
 import './control-plan.css';
+import './governing-documents.css';
 import './studio-shell.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
