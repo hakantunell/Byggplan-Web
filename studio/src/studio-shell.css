@@ -5,6 +5,7 @@ body{overflow-x:hidden}
 
 /* Project view uses the original Studio rail from App.tsx. */
 .studioShell.view-project .rail{position:relative;z-index:1}
+.studioShell.view-project .rail>button:nth-child(2){display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
 
 /* Control-plan view is a separate application page using the same rail styling. */
 .controlPlanStudioFrame{
