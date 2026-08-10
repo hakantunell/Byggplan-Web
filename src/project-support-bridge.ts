@@ -40,6 +40,8 @@ type FieldTask = {
 
 type ExecutionContextItem = { activity_id:string; context:'field'|'administrative' };
 
+const ENRICHMENT_TIMEOUT_MS = 1800;
+
 function requestUrl(input: RequestInfo | URL) {
   if (input instanceof Request) return new URL(input.url, window.location.origin);
   return new URL(String(input), window.location.origin);
@@ -58,6 +60,16 @@ function supportItem(resource: SupportResource, apiOrigin: string): SupportItem 
       url: new URL(file.url, apiOrigin).toString()
     }))
   };
+}
+
+async function fetchWithDeadline(fetcher: typeof window.fetch, url: string) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
+  try {
+    return await fetcher(url, { cache:'no-store', signal:controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export function installProjectSupportBridge() {
@@ -80,12 +92,15 @@ export function installProjectSupportBridge() {
       const data = await response.clone().json() as { tasks?: FieldTask[] };
       if (!Array.isArray(data.tasks)) return response;
 
-      const [supportResponse,contextResponse] = await Promise.all([
-        baseFetch(`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' }),
-        baseFetch(`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' })
+      const [supportResult,contextResult] = await Promise.allSettled([
+        fetchWithDeadline(baseFetch, `${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`),
+        fetchWithDeadline(baseFetch, `${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`)
       ]);
 
-      if (supportResponse.ok) {
+      const supportResponse = supportResult.status === 'fulfilled' ? supportResult.value : null;
+      const contextResponse = contextResult.status === 'fulfilled' ? contextResult.value : null;
+
+      if (supportResponse?.ok) {
         const support = await supportResponse.json() as {
           taskResources?: SupportResource[];
           activityResources?: SupportResource[];
@@ -106,7 +121,7 @@ export function installProjectSupportBridge() {
         }
       }
 
-      if(contextResponse.ok){
+      if(contextResponse?.ok){
         const contexts=await contextResponse.json() as {items?:ExecutionContextItem[]};
         const administrative=new Set((contexts.items||[]).filter(item=>item.context==='administrative').map(item=>item.activity_id));
         for(const task of data.tasks)task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
