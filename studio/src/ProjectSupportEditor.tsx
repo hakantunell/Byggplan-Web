@@ -11,6 +11,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
   const [title,setTitle]=useState('');
   const [content,setContent]=useState('');
   const [busy,setBusy]=useState(false);
+  const [loading,setLoading]=useState(true);
   const [uploadingId,setUploadingId]=useState('');
   const [message,setMessage]=useState('');
   const label=ownerType==='task'?'Arbetsunderlag':'Detaljunderlag';
@@ -18,13 +19,14 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
   useEffect(()=>{ void load(); },[ownerType,ownerId]);
 
   async function load(){
-    setMessage('');
+    setMessage('');setLoading(true);
     try{
       const response=await fetch(`/api/studio/project-support/${ownerType}/${encodeURIComponent(ownerId)}`,{cache:'no-store'});
       const data=await response.json().catch(()=>({})) as {resources?:Resource[];error?:string};
       if(!response.ok)throw new Error(data.error||`Kunde inte läsa ${label.toLowerCase()}.`);
       setResources(data.resources||[]);
     }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte läsa underlag.');}
+    finally{setLoading(false);}
   }
 
   function newItem(){setEditingId('new');setTitle('');setContent('');setOpen(true);}
@@ -98,13 +100,14 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
 
   return <section className="projectSupportEditor">
     <button type="button" className="projectSupportHeader" onClick={()=>setOpen(value=>!value)}>
-      <span>{open?'⌄':'›'}</span><strong>{label}</strong><small>{resources.length ? `${resources.length} underlag` : 'Inget underlag ännu'}</small>
+      <span>{open?'⌄':'›'}</span><strong>{label}</strong><small>{loading?'Laddar…':resources.length ? `${resources.length} underlag` : 'Inget underlag ännu'}</small>
     </button>
     {open&&<div className="projectSupportBody">
       <div className="projectSupportIntro"><p>{ownerType==='task'?'Lägg in ritningar, tekniska beskrivningar, bilder och annan information som gäller hela momentet.':'Lägg in instruktioner, mått, bilder eller ritningsdetaljer som bara gäller denna aktivitet.'}</p><button type="button" onClick={newItem}>＋ Nytt underlag</button></div>
       {message&&<div className="projectSupportMessage">{message}</div>}
-      {editingId&&<div className="projectSupportForm"><label><span>Rubrik</span><input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder={ownerType==='task'?'Ex. Grundritning och mått':'Ex. Mät från färdigt golv'} /></label><label><span>Beskrivning</span><textarea rows={8} value={content} onChange={e=>setContent(e.target.value)} placeholder="Skriv det som behövs för just detta projekt…" /></label>{editingId==='new'&&<small className="projectSupportHint">Spara underlaget först. Därefter kan du lägga till bilder och PDF-filer.</small>}<div><button onClick={cancel} disabled={busy}>Avbryt</button><button className="primary" onClick={()=>void save()} disabled={busy||!title.trim()}>{busy?'Sparar…':'Spara'}</button></div></div>}
-      {!editingId&&resources.map(item=><article className="projectSupportCard" key={item.id}>
+      {loading&&<div className="projectSupportEmpty">Laddar underlag…</div>}
+      {!loading&&editingId&&<div className="projectSupportForm"><label><span>Rubrik</span><input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder={ownerType==='task'?'Ex. Grundritning och mått':'Ex. Mät från färdigt golv'} /></label><label><span>Beskrivning</span><textarea rows={8} value={content} onChange={e=>setContent(e.target.value)} placeholder="Skriv det som behövs för just detta projekt…" /></label>{editingId==='new'&&<small className="projectSupportHint">Spara underlaget först. Därefter kan du lägga till bilder och PDF-filer.</small>}<div><button onClick={cancel} disabled={busy}>Avbryt</button><button className="primary" onClick={()=>void save()} disabled={busy||!title.trim()}>{busy?'Sparar…':'Spara'}</button></div></div>}
+      {!loading&&!editingId&&resources.map(item=><article className="projectSupportCard" key={item.id}>
         <div className="projectSupportCardMain"><strong>{item.title}</strong>{item.content_text&&<p>{item.content_text}</p>}
           {Boolean(item.attachments?.length)&&<div className="projectSupportAttachments">{item.attachments!.map(file=><div className="projectSupportAttachment" key={file.id}>
             <a href={file.url} target="_blank" rel="noreferrer"><span>{file.contentType.startsWith('image/')?'🖼':'📄'}</span><span><b>{file.originalName}</b><small>{formatBytes(file.sizeBytes)}</small></span></a>
@@ -114,7 +117,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
         </div>
         <div className="projectSupportCardActions"><button onClick={()=>edit(item)}>Redigera text</button><button className="danger" onClick={()=>void remove(item)} disabled={busy}>Ta bort underlag</button></div>
       </article>)}
-      {!editingId&&!resources.length&&<div className="projectSupportEmpty">Inget {label.toLowerCase()} har lagts in för detta projekt ännu.</div>}
+      {!loading&&!editingId&&!resources.length&&<div className="projectSupportEmpty">Inget {label.toLowerCase()} har lagts in för detta projekt ännu.</div>}
     </div>}
   </section>;
 }
