@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { MasterSupportEditor } from './MasterSupportEditor';
 
 type MasterProjectSummary = {
   id: string;
@@ -28,7 +29,7 @@ type TreeResponse = {
 
 type Props = { onProjectCreated?: (projectId:string) => void };
 
-const API_BASE=(import.meta.env.VITE_API_BASE_URL||'https://api.byggplan.tunell.org').replace(/\/$/,'');
+const API_BASE='';
 const ACTIVITY_LABELS:Record<string,string>={perform:'Utför',document:'Dokumentera',measurement:'Mät',check:'Kontrollera',approval:'Godkänn',note:'Kom ihåg',choice:'Välj'};
 const ACTIVITY_ICONS:Record<string,string>={perform:'●',document:'📷',measurement:'📏',check:'✓',approval:'✍',note:'📝',choice:'◉'};
 
@@ -98,28 +99,19 @@ export function MasterProjectsView({onProjectCreated}:Props){
     finally{setLoading(false);}
   }
 
-  function openCreate(){
-    setProjectName('');
-    setPropertyDesignation('');
-    setMessage('');
-    setCreateOpen(true);
-  }
+  function openCreate(){setProjectName('');setPropertyDesignation('');setMessage('');setCreateOpen(true);}
 
   async function createProject(){
     if(!selected||!projectName.trim())return;
-    setLoading(true);
-    setMessage('Skapar projektkopia från masterprojektet…');
+    setLoading(true);setMessage('Skapar projektkopia från masterprojektet…');
     try{
-      const response=await fetch(`${API_BASE}/api/studio/master-projects/${encodeURIComponent(selected.id)}/create-project`,{
-        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:projectName.trim(),propertyDesignation:propertyDesignation.trim()})
-      });
+      const response=await fetch(`${API_BASE}/api/studio/master-projects/${encodeURIComponent(selected.id)}/create-project`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:projectName.trim(),propertyDesignation:propertyDesignation.trim()})});
       const data=await response.json().catch(()=>({})) as {project?:{id:string;name:string};created?:{areas:number;sections:number;tasks:number;activities:number};error?:string};
       if(!response.ok)throw new Error(data.error||'Projektet kunde inte skapas.');
       if(!data.project?.id)throw new Error('Projektet skapades men inget projekt-ID returnerades.');
       const created=data.created;
       setMessage(`Projektet ”${data.project.name}” skapades${created?` · ${created.areas} områden · ${created.tasks} moment · ${created.activities} aktiviteter`:''}.`);
-      setCreateOpen(false);
-      onProjectCreated?.(data.project.id);
+      setCreateOpen(false);onProjectCreated?.(data.project.id);
     }catch(error){setMessage(error instanceof Error?error.message:'Projektet kunde inte skapas.');}
     finally{setLoading(false);}
   }
@@ -128,9 +120,7 @@ export function MasterProjectsView({onProjectCreated}:Props){
     <aside className="masterProjectList">
       <div className="masterProjectListHeader"><small>MASTERPROJEKT</small><strong>Projektmallar</strong><p>Återanvändbara byggprocesser som lagras i databasen.</p></div>
       <div className="masterProjectCards">
-        {projects.map(project=><button key={project.id} className={selectedId===project.id?'active':''} onClick={()=>setSelectedId(project.id)}>
-          <span className="masterProjectIcon">🏠</span><span><b>{project.name}</b><small>Version {project.version}</small><em>{project.area_count} områden · {project.task_count} moment · {project.activity_count} aktiviteter</em></span>
-        </button>)}
+        {projects.map(project=><button key={project.id} className={selectedId===project.id?'active':''} onClick={()=>setSelectedId(project.id)}><span className="masterProjectIcon">🏠</span><span><b>{project.name}</b><small>Version {project.version}</small><em>{project.area_count} områden · {project.task_count} moment · {project.activity_count} aktiviteter</em></span></button>)}
         {!projects.length&&!loading&&<div className="masterEmpty"><span>🏠</span><b>Inget masterprojekt ännu</b><p>Skapa den första databaskopian av Fritidshus-processen.</p><button onClick={()=>void bootstrap()}>+ Skapa Masterprojekt – Fritidshus</button></div>}
       </div>
     </aside>
@@ -152,7 +142,15 @@ export function MasterProjectsView({onProjectCreated}:Props){
                   const taskKey=`task:${task.id}`;const taskOpen=expanded.has(taskKey);const activities=activitiesByTask.get(task.id)||[];
                   return <article className="masterTask" key={task.id}>
                     <button className="masterTaskHeader" onClick={()=>toggle(taskKey)}><span>{taskOpen?'⌄':'›'}</span><strong>{task.title}</strong><small>{activities.length} aktiviteter</small></button>
-                    {taskOpen&&<div className="masterActivities">{task.description&&<p>{task.description}</p>}{activities.map((activity,index)=><div className="masterActivity" key={activity.id}><span className="masterActivityIndex">{index+1}</span><span className="masterActivityIcon">{ACTIVITY_ICONS[activity.activity_type]||'●'}</span><span><b>{activity.title}</b>{activity.description&&<p>{activity.description}</p>}<small>{ACTIVITY_LABELS[activity.activity_type]||activity.activity_type}</small></span></div>)}</div>}
+                    {taskOpen&&<div className="masterActivities">
+                      {task.description&&<p>{task.description}</p>}
+                      <MasterSupportEditor scope="task" entityId={task.id} label="Arbetsunderlag" />
+                      {activities.map((activity,index)=><div className="masterActivity" key={activity.id}>
+                        <span className="masterActivityIndex">{index+1}</span>
+                        <span className="masterActivityIcon">{ACTIVITY_ICONS[activity.activity_type]||'●'}</span>
+                        <span><b>{activity.title}</b>{activity.description&&<p>{activity.description}</p>}<small>{ACTIVITY_LABELS[activity.activity_type]||activity.activity_type}</small><MasterSupportEditor scope="activity" entityId={activity.id} label="Detaljunderlag" /></span>
+                      </div>)}
+                    </div>}
                   </article>;
                 })}</div>}
               </section>;
