@@ -8,7 +8,9 @@ function resolveMethod(input: RequestInfo | URL, init?: RequestInit): string {
 
 function shouldRelayWrite(pathname:string,method:string){
   if (method === 'GET') return false;
-  return pathname === '/api/studio/project-administration' || pathname.startsWith('/api/studio/project-administration/');
+  return pathname === '/api/studio/project-administration' ||
+    pathname.startsWith('/api/studio/project-administration/') ||
+    (method === 'DELETE' && pathname.startsWith('/api/studio/projects/'));
 }
 
 function rewriteApiUrl(value: string, method: string): string {
