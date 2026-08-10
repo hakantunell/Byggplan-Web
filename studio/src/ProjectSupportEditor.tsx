@@ -47,38 +47,22 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
   }
 
   async function upload(item:Resource,file:File){
-    setUploadingId(item.id);setMessage('Kontrollerar uppladdningsvägen…');
+    setUploadingId(item.id);setMessage('Laddar upp bilaga…');
     try{
       if(file.size>20*1024*1024)throw new Error('Filen får vara högst 20 MB.');
       const contentType=file.type||(file.name.toLowerCase().endsWith('.pdf')?'application/pdf':'');
       if(!contentType.startsWith('image/')&&contentType!=='application/pdf')throw new Error('Endast bilder och PDF-filer stöds just nu.');
 
-      const uploadUrl=`/api/u/${encodeURIComponent(item.id)}`;
-      const probeResponse=await fetch(uploadUrl,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({probe:true})
-      });
-      const probeRaw=await probeResponse.text();
-      if(isCorporateBlockPage(probeRaw)){
-        throw new Error(`Nätverksfiltret blockerar även den neutrala uppladdningsadressen (${uploadUrl}).`);
-      }
-      let probeData:{ok?:boolean;probe?:boolean;error?:string}={};
-      try{probeData=probeRaw?JSON.parse(probeRaw):{};}catch{}
-      if(!probeResponse.ok||probeData.probe!==true){
-        throw new Error(probeData.error||probeRaw||`Uppladdningsvägen svarade oväntat (HTTP ${probeResponse.status}).`);
-      }
-
-      setMessage('Uppladdningsvägen fungerar. Skickar filen…');
       const dataBase64=await fileToBase64(file);
+      const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}`;
       const response=await fetch(uploadUrl,{
-        method:'POST',
+        method:'PUT',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:file.name,contentType,dataBase64})
+        body:JSON.stringify({operation:'addAttachment',name:file.name,contentType,dataBase64})
       });
       const raw=await response.text();
       if(isCorporateBlockPage(raw)){
-        throw new Error('Den neutrala adressen fungerar utan filinnehåll, men nätverksfiltret blockerar själva payloaden.');
+        throw new Error('Nätverksfiltret tillåter samma adress när text sparas men blockerar begäran när bilageinnehåll skickas. Det pekar på payload-/DLP-inspektion, inte URL:en.');
       }
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
