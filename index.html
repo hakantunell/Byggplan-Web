@@ -6,13 +6,9 @@
   <meta name="theme-color" content="#174c3c" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <title>ByggPlan</title>
-  <style>
-    #byggplan-build-marker{position:fixed;right:6px;top:6px;z-index:99999;font:10px/1.2 system-ui,sans-serif;color:#607068;background:rgba(255,255,255,.88);padding:3px 5px;border-radius:5px;pointer-events:none}
-    .boot-fallback{font:14px system-ui,sans-serif;padding:24px;color:#33433b}
-  </style>
+  <style>.boot-fallback{font:14px system-ui,sans-serif;padding:24px;color:#33433b}</style>
 </head>
 <body>
-  <div id="byggplan-build-marker">web diag 2026-08-10 18:57</div>
   <div id="root"><div class="boot-fallback">Startar ByggPlan…</div></div>
   <script>
     window.addEventListener('error',function(event){
@@ -21,9 +17,7 @@
         root.innerHTML='<div class="boot-fallback"><b>Frontendfel</b><br><pre style="white-space:pre-wrap">'+String(event.message||'Okänt JavaScript-fel').replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre></div>';
       }
     });
-    window.addEventListener('unhandledrejection',function(event){
-      console.error('Unhandled frontend rejection',event.reason);
-    });
+    window.addEventListener('unhandledrejection',function(event){console.error('Unhandled frontend rejection',event.reason);});
   </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
