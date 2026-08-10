@@ -8,16 +8,24 @@ type SupportResource = {
   sort_order: number;
 };
 
+type SupportItem = {
+  id: string;
+  title: string;
+  type: 'text';
+  summary: string;
+  details: string[];
+};
+
 type FieldActivity = {
   id: string;
-  technicalResourceId?: string;
+  detailSupport?: SupportItem[];
 };
 
 type FieldTask = {
   id: string;
   workArea: string;
   activities: FieldActivity[];
-  technical: any[];
+  workSupport?: SupportItem[];
 };
 
 const HIDDEN_FIELD_AREAS = new Set([
@@ -29,9 +37,15 @@ function requestUrl(input: RequestInfo | URL) {
   return new URL(String(input), window.location.origin);
 }
 
-function textLines(resource: SupportResource) {
+function supportItem(resource: SupportResource): SupportItem {
   const content = resource.content_text?.trim();
-  return content ? content.split('\n') : [];
+  return {
+    id: resource.id,
+    title: resource.title,
+    type: 'text',
+    summary: '',
+    details: content ? content.split('\n') : []
+  };
 }
 
 export function installProjectSupportBridge() {
@@ -66,37 +80,14 @@ export function installProjectSupportBridge() {
         const activityResources = support.activityResources || [];
 
         for (const task of data.tasks) {
-          const taskSupport = taskResources.filter(item => item.task_id === task.id);
-          for (const resource of taskSupport) {
-            task.technical.push({
-              id: `project-work:${resource.id}`,
-              title: resource.title,
-              type: 'text',
-              summary: '',
-              details: textLines(resource),
-              sourceLevel: 'task'
-            });
-          }
+          task.workSupport = taskResources
+            .filter(item => item.task_id === task.id)
+            .map(supportItem);
 
           for (const activity of task.activities) {
-            const detailSupport = activityResources.filter(item => item.activity_id === activity.id);
-            if (!detailSupport.length) continue;
-            const syntheticId = `project-detail:${activity.id}`;
-            const details = detailSupport.flatMap(resource => {
-              const lines = textLines(resource);
-              return detailSupport.length > 1
-                ? [resource.title, ...lines]
-                : lines;
-            });
-            task.technical.push({
-              id: syntheticId,
-              title: detailSupport.length === 1 ? detailSupport[0].title : 'Detaljunderlag',
-              type: 'text',
-              summary: '',
-              details,
-              sourceLevel: 'task'
-            });
-            activity.technicalResourceId = syntheticId;
+            activity.detailSupport = activityResources
+              .filter(item => item.activity_id === activity.id)
+              .map(supportItem);
           }
         }
       }
