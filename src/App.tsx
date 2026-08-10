@@ -5,7 +5,8 @@ type ActivityType = 'perform' | 'document' | 'measurement' | 'check' | 'approval
 type DocumentationEntry = { id:string; valueText?:string; valueNumber?:number; valueBoolean?:boolean; objectKey?:string; originalName?:string; contentType?:string; note?:string; createdAt:string };
 type DocumentationField = { id:string; type:'photo'|'number'|'text'|'boolean'|'file'|'choice'|'signature'; label:string; helpText?:string; unit?:string; required:boolean; minimumItems?:number; maximumItems?:number; minimumValue?:number; maximumValue?:number; options?:string[]; entries:DocumentationEntry[] };
 type DocumentationProfile = { id:string; code:string; name:string; type:string };
-type SupportItem = { id:string; title:string; type:'text'|'drawing'|'image'|'document'|'material'; summary:string; revision?:string; details?:string[]; objectKey?:string; externalUrl?:string; sourceLevel?:'project'|'work_area'|'work_section'|'task' };
+type SupportAttachment = { id:string; originalName:string; contentType:string; sizeBytes:number; url:string };
+type SupportItem = { id:string; title:string; type:'text'|'drawing'|'image'|'document'|'material'; summary:string; revision?:string; details?:string[]; objectKey?:string; externalUrl?:string; sourceLevel?:'project'|'work_area'|'work_section'|'task'; attachments?:SupportAttachment[] };
 type Activity = { id:string; title:string; description?:string; type:ActivityType; unit?:string; required:boolean; blocking:boolean; irreversible:boolean; technicalResourceId?:string; done:boolean; value?:string; documentationFields:DocumentationField[]; documentationProfiles:DocumentationProfile[]; detailSupport?:SupportItem[] };
 type Project = { id:string; name:string; property_designation?:string; status:string; work_area_count:number; work_section_count:number; task_count:number };
 type TaskStatus = 'todo'|'active'|'review'|'done'|'blocked';
@@ -195,7 +196,7 @@ function ActivityRow({activity,index,task,expanded,isNext,isFuture,onToggle,onUp
 }
 
 function ActivityDetailSupport({items}:{items:SupportItem[]}){
-  return <details className="detailSupport"><summary><span>🔎</span><span><b>Detaljunderlag</b><small>{items.length===1?items[0].title:`${items.length} poster`}</small></span><em>+</em></summary><div className="detailSupportBody">{items.map(item=><article key={item.id}>{items.length>1&&<h4>{item.title}</h4>}{item.summary&&<p>{item.summary}</p>}{item.revision&&<small>Revision: {item.revision}</small>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}{(item.externalUrl||item.objectKey)&&<button type="button">Öppna underlaget</button>}</article>)}</div></details>;
+  return <details className="detailSupport"><summary><span>🔎</span><span><b>Detaljunderlag</b><small>{items.length===1?items[0].title:`${items.length} poster`}</small></span><em>+</em></summary><div className="detailSupportBody">{items.map(item=><article key={item.id}>{items.length>1&&<h4>{item.title}</h4>}{item.summary&&<p>{item.summary}</p>}{item.revision&&<small>Revision: {item.revision}</small>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}<SupportAttachments files={item.attachments||[]}/>{(item.externalUrl||item.objectKey)&&<button type="button">Öppna underlaget</button>}</article>)}</div></details>;
 }
 
 function DocumentationInput({field,disabled,onSave,onUpload,onDeleteEntry}:{field:DocumentationField;disabled:boolean;onSave:(field:DocumentationField,payload:{valueText?:string|null;valueNumber?:number|null;valueBoolean?:boolean|null})=>Promise<void>;onUpload:(field:DocumentationField,file:File)=>Promise<boolean>;onDeleteEntry:(entry:DocumentationEntry)=>Promise<void>}){
@@ -222,6 +223,13 @@ function DocumentationInput({field,disabled,onSave,onUpload,onDeleteEntry}:{fiel
   return <label className="docField textField"><span><b>{field.label}</b>{field.helpText&&<small>{field.helpText}</small>}</span><textarea disabled={disabled} defaultValue={entry?.valueText??''} onBlur={event=>{if(!disabled)void onSave(field,{valueText:event.target.value||null});}}/></label>;
 }
 
-function SupportList({items}:{items:SupportItem[]}){return <div className="technicalList">{items.length===0&&<p>Inget arbetsunderlag är kopplat.</p>}{items.map(item=><article key={item.id}><span>{item.type==='drawing'?'▱':item.type==='image'?'▧':item.type==='document'?'▤':item.type==='material'?'▦':'i'}</span><div><small>{typeLabels[item.type]}{item.sourceLevel?` · ${levelLabels[item.sourceLevel]}`:''}</small><b>{item.title}</b>{item.summary&&<p>{item.summary}</p>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}</div></article>)}</div>;}
+function SupportAttachments({files}:{files:SupportAttachment[]}){
+  if(!files.length)return null;
+  return <div className="supportAttachments">{files.map(file=><a key={file.id} className="supportAttachment" href={file.url} target="_blank" rel="noreferrer"><span>{file.contentType.startsWith('image/')?'🖼':'📄'}</span><span><b>{file.originalName}</b><small>{file.contentType.startsWith('image/')?'Bild':'PDF'}{file.sizeBytes?` · ${formatBytes(file.sizeBytes)}`:''}</small></span><em>Öppna ↗</em></a>)}</div>;
+}
+
+function formatBytes(value:number){if(value<1024)return `${value} B`;if(value<1024*1024)return `${Math.round(value/1024)} kB`;return `${(value/(1024*1024)).toFixed(1)} MB`;}
+
+function SupportList({items}:{items:SupportItem[]}){return <div className="technicalList">{items.length===0&&<p>Inget arbetsunderlag är kopplat.</p>}{items.map(item=><article key={item.id}><span>{item.type==='drawing'?'▱':item.type==='image'?'▧':item.type==='document'?'▤':item.type==='material'?'▦':'i'}</span><div><small>{typeLabels[item.type]}{item.sourceLevel?` · ${levelLabels[item.sourceLevel]}`:''}</small><b>{item.title}</b>{item.summary&&<p>{item.summary}</p>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}<SupportAttachments files={item.attachments||[]}/></div></article>)}</div>;}
 function ProjectChooser({projects,onChoose}:{projects:Project[];onChoose:(id:string)=>void}){return <main className="projectChooser"><strong>ByggPlan</strong>{projects.map(project=><button key={project.id} onClick={()=>onChoose(project.id)}>{project.name}</button>)}</main>;}
 function CenterState({text,retry}:{text:string;retry?:()=>void}){return <div className="centerState"><strong>ByggPlan</strong><p>{text}</p>{retry&&<button onClick={retry}>Försök igen</button>}</div>;}
