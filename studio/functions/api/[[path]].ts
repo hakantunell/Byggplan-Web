@@ -16,10 +16,26 @@ export async function onRequest(context: PagesContext): Promise<Response> {
   headers.delete('host');
   headers.delete('content-length');
 
+  const method = context.request.method;
+  const hasBody = !['GET', 'HEAD'].includes(method);
+  const contentType = context.request.headers.get('content-type') || '';
+
+  let body: BodyInit | undefined;
+  if (hasBody) {
+    if (contentType.toLowerCase().startsWith('multipart/form-data')) {
+      // Buffer multipart requests before forwarding. Streaming a multipart body
+      // through a Pages Function can otherwise leave the upstream worker with
+      // an incomplete body/boundary, while ordinary JSON requests still work.
+      body = await context.request.arrayBuffer();
+    } else {
+      body = context.request.body ?? undefined;
+    }
+  }
+
   const upstreamRequest = new Request(targetUrl.toString(), {
-    method: context.request.method,
+    method,
     headers,
-    body: ['GET', 'HEAD'].includes(context.request.method) ? undefined : context.request.body,
+    body,
     redirect: 'manual'
   });
 
