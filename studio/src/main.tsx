@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './same-origin-api';
 import { StudioShell } from './StudioShell';
+import { ProjectDocumentsDock } from './ProjectDocumentsDock';
 import './styles.css';
 import './palette.css';
 import './classifications.css';
@@ -14,9 +15,11 @@ import './governing-mapping-exception.css';
 import './studio-shell.css';
 import './master-projects.css';
 import './project-support.css';
+import './project-documents.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <StudioShell />
+    <ProjectDocumentsDock />
   </React.StrictMode>
 );
