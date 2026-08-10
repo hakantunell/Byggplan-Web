@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './same-origin-api';
 import { StudioShell } from './StudioShell';
 import './styles.css';
 import './palette.css';
