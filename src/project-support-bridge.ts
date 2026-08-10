@@ -28,6 +28,7 @@ type SupportItem = {
 
 type FieldActivity = {
   id: string;
+  title:string;
   detailSupport?: SupportItem[];
 };
 
@@ -38,9 +39,12 @@ type FieldTask = {
   workSupport?: SupportItem[];
 };
 
-type ExecutionContextItem = { activity_id:string; context:'field'|'administrative' };
-
-const ENRICHMENT_TIMEOUT_MS = 1800;
+type ExecutionContextItem = {
+  activity_id:string;
+  context:'field'|'administrative';
+  executor_type?:'self'|'third_party';
+  executor_label?:string|null;
+};
 
 function requestUrl(input: RequestInfo | URL) {
   if (input instanceof Request) return new URL(input.url, window.location.origin);
@@ -62,14 +66,10 @@ function supportItem(resource: SupportResource, apiOrigin: string): SupportItem 
   };
 }
 
-async function fetchWithDeadline(fetcher: typeof window.fetch, url: string) {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), ENRICHMENT_TIMEOUT_MS);
-  try {
-    return await fetcher(url, { cache:'no-store', signal:controller.signal });
-  } finally {
-    window.clearTimeout(timer);
-  }
+async function fetchWithTimeout(baseFetch:typeof window.fetch,input:RequestInfo|URL,init:RequestInit,timeoutMs=1800){
+  const controller=new AbortController();
+  const timer=window.setTimeout(()=>controller.abort(),timeoutMs);
+  try{return await baseFetch(input,{...init,signal:controller.signal})}finally{window.clearTimeout(timer)}
 }
 
 export function installProjectSupportBridge() {
@@ -93,12 +93,12 @@ export function installProjectSupportBridge() {
       if (!Array.isArray(data.tasks)) return response;
 
       const [supportResult,contextResult] = await Promise.allSettled([
-        fetchWithDeadline(baseFetch, `${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`),
-        fetchWithDeadline(baseFetch, `${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`)
+        fetchWithTimeout(baseFetch,`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' }),
+        fetchWithTimeout(baseFetch,`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' })
       ]);
 
-      const supportResponse = supportResult.status === 'fulfilled' ? supportResult.value : null;
-      const contextResponse = contextResult.status === 'fulfilled' ? contextResult.value : null;
+      const supportResponse=supportResult.status==='fulfilled'?supportResult.value:null;
+      const contextResponse=contextResult.status==='fulfilled'?contextResult.value:null;
 
       if (supportResponse?.ok) {
         const support = await supportResponse.json() as {
@@ -123,8 +123,19 @@ export function installProjectSupportBridge() {
 
       if(contextResponse?.ok){
         const contexts=await contextResponse.json() as {items?:ExecutionContextItem[]};
-        const administrative=new Set((contexts.items||[]).filter(item=>item.context==='administrative').map(item=>item.activity_id));
-        for(const task of data.tasks)task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
+        const items=contexts.items||[];
+        const administrative=new Set(items.filter(item=>item.context==='administrative').map(item=>item.activity_id));
+        const executorByActivity=new Map(items.map(item=>[item.activity_id,item]));
+        for(const task of data.tasks){
+          for(const activity of task.activities){
+            const execution=executorByActivity.get(activity.id);
+            if(!execution||execution.context==='administrative')continue;
+            activity.title=execution.executor_type==='third_party'
+              ?`👥${execution.executor_label?` ${execution.executor_label} ·`:''} ${activity.title}`
+              :`👤 ${activity.title}`;
+          }
+          task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
+        }
         data.tasks=data.tasks.filter(task=>task.activities.length>0);
       }
 
