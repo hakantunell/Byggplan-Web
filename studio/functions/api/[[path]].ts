@@ -9,8 +9,17 @@ export async function onRequest(context: PagesContext): Promise<Response> {
   const pathValue = context.params.path;
   const path = Array.isArray(pathValue) ? pathValue.join('/') : (pathValue || '');
   const incomingUrl = new URL(context.request.url);
-  const targetUrl = new URL(`/api/${path}`, API_ORIGIN);
-  targetUrl.search = incomingUrl.search;
+
+  let targetPath = `/api/${path}`;
+  if (context.request.method === 'GET' && path === 'studio/structure') {
+    const relay = incomingUrl.searchParams.get('__relay');
+    if (relay?.startsWith('/api/')) targetPath = relay;
+  }
+
+  const targetUrl = new URL(targetPath, API_ORIGIN);
+  const forwardedSearch = new URLSearchParams(incomingUrl.searchParams);
+  forwardedSearch.delete('__relay');
+  targetUrl.search = forwardedSearch.toString();
 
   const headers = new Headers(context.request.headers);
   headers.delete('host');
@@ -23,9 +32,6 @@ export async function onRequest(context: PagesContext): Promise<Response> {
   let body: BodyInit | undefined;
   if (hasBody) {
     if (contentType.toLowerCase().startsWith('multipart/form-data')) {
-      // Buffer multipart requests before forwarding. Streaming a multipart body
-      // through a Pages Function can otherwise leave the upstream worker with
-      // an incomplete body/boundary, while ordinary JSON requests still work.
       body = await context.request.arrayBuffer();
     } else {
       body = context.request.body ?? undefined;
