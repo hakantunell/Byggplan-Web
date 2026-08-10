@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './same-origin-api';
+import { installExecutionContextBridge } from './execution-context-bridge';
 import { StudioShell } from './StudioShell';
 import { ProjectOverviewExtras } from './ProjectOverviewExtras';
 import './styles.css';
@@ -17,6 +18,8 @@ import './master-projects.css';
 import './project-support.css';
 import './project-documents.css';
 import './project-administration.css';
+
+installExecutionContextBridge();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
