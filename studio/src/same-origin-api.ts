@@ -6,6 +6,11 @@ function resolveMethod(input: RequestInfo | URL, init?: RequestInit): string {
   return 'GET';
 }
 
+function shouldRelayWrite(pathname:string,method:string){
+  if (method === 'GET') return false;
+  return pathname === '/api/studio/project-administration' || pathname.startsWith('/api/studio/project-administration/');
+}
+
 function rewriteApiUrl(value: string, method: string): string {
   try {
     const url = new URL(value, window.location.origin);
@@ -13,10 +18,9 @@ function rewriteApiUrl(value: string, method: string): string {
     const isStudioHost = url.origin === window.location.origin;
     if (!url.pathname.startsWith('/api/') || (!isApiHost && !isStudioHost)) return value;
 
-    // All read-only Studio API calls use one browser-visible route. This avoids
-    // fragile/special URL paths in restrictive networks while keeping the real
-    // backend route server-side in the Pages proxy.
-    if (method === 'GET' && url.pathname !== '/api/studio/structure') {
+    const relayRead = method === 'GET' && url.pathname !== '/api/studio/structure';
+    const relayWrite = shouldRelayWrite(url.pathname,method);
+    if (relayRead || relayWrite) {
       const relay = new URL('/api/studio/structure', window.location.origin);
       relay.searchParams.set('__relay', url.pathname);
       url.searchParams.forEach((entryValue, key) => relay.searchParams.append(key, entryValue));
