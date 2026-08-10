@@ -76,6 +76,8 @@ export function installProjectSupportBridge() {
     const projectId = url.searchParams.get('projectId');
     if (!projectId) return response;
 
+    window.dispatchEvent(new CustomEvent('byggplan:active-project', { detail: { projectId } }));
+
     try {
       const data = await response.clone().json() as { tasks?: FieldTask[] };
       if (!Array.isArray(data.tasks)) return response;
