@@ -14,6 +14,7 @@ export async function onRequest(context: PagesContext): Promise<Response> {
 
   const headers = new Headers(context.request.headers);
   headers.delete('host');
+  headers.delete('content-length');
 
   const upstreamRequest = new Request(targetUrl.toString(), {
     method: context.request.method,
