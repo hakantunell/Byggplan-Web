@@ -38,9 +38,7 @@ type FieldTask = {
   workSupport?: SupportItem[];
 };
 
-const HIDDEN_FIELD_AREAS = new Set([
-  'Etablering och byggstart'
-]);
+type ExecutionContextItem = { activity_id:string; context:'field'|'administrative' };
 
 function requestUrl(input: RequestInfo | URL) {
   if (input instanceof Request) return new URL(input.url, window.location.origin);
@@ -82,10 +80,10 @@ export function installProjectSupportBridge() {
       const data = await response.clone().json() as { tasks?: FieldTask[] };
       if (!Array.isArray(data.tasks)) return response;
 
-      const supportResponse = await baseFetch(
-        `${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`,
-        { cache: 'no-store' }
-      );
+      const [supportResponse,contextResponse] = await Promise.all([
+        baseFetch(`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' }),
+        baseFetch(`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' })
+      ]);
 
       if (supportResponse.ok) {
         const support = await supportResponse.json() as {
@@ -108,7 +106,12 @@ export function installProjectSupportBridge() {
         }
       }
 
-      data.tasks = data.tasks.filter(task => !HIDDEN_FIELD_AREAS.has(task.workArea));
+      if(contextResponse.ok){
+        const contexts=await contextResponse.json() as {items?:ExecutionContextItem[]};
+        const administrative=new Set((contexts.items||[]).filter(item=>item.context==='administrative').map(item=>item.activity_id));
+        for(const task of data.tasks)task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
+        data.tasks=data.tasks.filter(task=>task.activities.length>0);
+      }
 
       const headers = new Headers(response.headers);
       headers.set('Content-Type', 'application/json; charset=utf-8');
@@ -119,7 +122,7 @@ export function installProjectSupportBridge() {
         headers
       });
     } catch (error) {
-      console.warn('Kunde inte berika fältappen med projektunderlag.', error);
+      console.warn('Kunde inte berika fältappen med projektunderlag och aktivitetsklassning.', error);
       return response;
     }
   };
