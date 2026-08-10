@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './same-origin-api';
 import { StudioShell } from './StudioShell';
-import { ProjectDocumentsDock } from './ProjectDocumentsDock';
+import { ProjectOverviewExtras } from './ProjectOverviewExtras';
 import './styles.css';
 import './palette.css';
 import './classifications.css';
@@ -16,10 +16,11 @@ import './studio-shell.css';
 import './master-projects.css';
 import './project-support.css';
 import './project-documents.css';
+import './project-administration.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <StudioShell />
-    <ProjectDocumentsDock />
+    <ProjectOverviewExtras />
   </React.StrictMode>
 );
