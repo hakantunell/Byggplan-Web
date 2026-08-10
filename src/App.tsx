@@ -5,16 +5,16 @@ type ActivityType = 'perform' | 'document' | 'measurement' | 'check' | 'approval
 type DocumentationEntry = { id:string; valueText?:string; valueNumber?:number; valueBoolean?:boolean; objectKey?:string; originalName?:string; contentType?:string; note?:string; createdAt:string };
 type DocumentationField = { id:string; type:'photo'|'number'|'text'|'boolean'|'file'|'choice'|'signature'; label:string; helpText?:string; unit?:string; required:boolean; minimumItems?:number; maximumItems?:number; minimumValue?:number; maximumValue?:number; options?:string[]; entries:DocumentationEntry[] };
 type DocumentationProfile = { id:string; code:string; name:string; type:string };
-type Activity = { id:string; title:string; description?:string; type:ActivityType; unit?:string; required:boolean; blocking:boolean; irreversible:boolean; technicalResourceId?:string; done:boolean; value?:string; documentationFields:DocumentationField[]; documentationProfiles:DocumentationProfile[] };
-type TechnicalItem = { id:string; title:string; type:'text'|'drawing'|'image'|'document'|'material'; summary:string; revision?:string; details?:string[]; objectKey?:string; externalUrl?:string; sourceLevel?:'project'|'work_area'|'work_section'|'task' };
+type SupportItem = { id:string; title:string; type:'text'|'drawing'|'image'|'document'|'material'; summary:string; revision?:string; details?:string[]; objectKey?:string; externalUrl?:string; sourceLevel?:'project'|'work_area'|'work_section'|'task' };
+type Activity = { id:string; title:string; description?:string; type:ActivityType; unit?:string; required:boolean; blocking:boolean; irreversible:boolean; technicalResourceId?:string; done:boolean; value?:string; documentationFields:DocumentationField[]; documentationProfiles:DocumentationProfile[]; detailSupport?:SupportItem[] };
 type Project = { id:string; name:string; property_designation?:string; status:string; work_area_count:number; work_section_count:number; task_count:number };
 type TaskStatus = 'todo'|'active'|'review'|'done'|'blocked';
-type Task = { id:string; projectId:string; project:string; workAreaId:string; workArea:string; workSectionId:string; workSection:string; title:string; description:string; status:TaskStatus; assignee?:string; activities:Activity[]; technical:TechnicalItem[] };
+type Task = { id:string; projectId:string; project:string; workAreaId:string; workArea:string; workSectionId:string; workSection:string; title:string; description:string; status:TaskStatus; assignee?:string; activities:Activity[]; technical:SupportItem[]; workSupport?:SupportItem[] };
 type MeResponse = { user:{ id:string; email:string; displayName:string; globalRoles:string[]; projects:{id:string;name:string;roles:string[];permissions:string[]}[] }; developmentIdentity:boolean };
 
 const API_BASE=(import.meta.env.VITE_API_BASE_URL||'https://api.byggplan.tunell.org').replace(/\/$/,'');
 const labels:Record<TaskStatus,string>={todo:'Kan göras',active:'Pågår',review:'Redo för kontroll',done:'Klart',blocked:'Blockerat'};
-const typeLabels={text:'Tekniska data',drawing:'Ritning',image:'Bild',document:'Dokument',material:'Material'};
+const typeLabels={text:'Text',drawing:'Ritning',image:'Bild',document:'Dokument',material:'Material'};
 const levelLabels={project:'Projekt',work_area:'Arbetsområde',work_section:'Arbetsavsnitt',task:'Moment'};
 const activityLabels:Record<ActivityType,string>={perform:'Utför',document:'Dokumentera',measurement:'Mät och registrera',check:'Kontrollera',approval:'Godkänn',note:'Anteckna',choice:'Välj'};
 const activityIcons:Record<ActivityType,string>={perform:'🛠',document:'📷',measurement:'📏',check:'✓',approval:'✍',note:'📝',choice:'◉'};
@@ -129,16 +129,17 @@ export function App(){
                 const completed=task.activities.filter(activity=>activity.done).length;
                 const nextActivityIndex=task.activities.findIndex(activity=>!activity.done);
                 const nextActivityId=nextActivityIndex>=0?task.activities[nextActivityIndex].id:undefined;
+                const workSupport=[...(task.technical||[]),...(task.workSupport||[])];
                 return <article className={`taskCard ${taskOpen?'open':''}`} key={task.id}>
                   <button className="taskHeader" onClick={()=>toggleTask(task)}><i className={task.status}/><span className="headerText"><b>{task.title}</b><small>{completed}/{task.activities.length} aktiviteter klara</small></span>{task.status==='review'&&canApprove&&<span className="reviewFlag" title="Väntar på ditt godkännande">!</span>}<span className={`pill ${task.status}`}>{labels[task.status]}</span><em>{taskOpen?'−':'+'}</em></button>
                   {taskOpen&&<div className="taskBody">
                     {task.description&&<p className="taskDescription">{task.description}</p>}
                     {task.status==='review'&&<ReviewNotice supervisor={canApprove}/>} 
                     {task.status==='done'&&<div className="approvedNotice">✓ Momentet är godkänt och klart.</div>}
-                    <button className="technicalButton technicalFirst" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📚</span><span><b>Arbetsunderlag</b><small>{task.technical.length} poster · läs före start</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button>
-                    {openTechnical.includes(task.id)&&<TechnicalList items={task.technical}/>} 
+                    <button className="technicalButton technicalFirst" onClick={()=>toggle(setOpenTechnical,task.id)}><span>📚</span><span><b>Arbetsunderlag</b><small>{workSupport.length} poster · läs före start</small></span><em>{openTechnical.includes(task.id)?'−':'+'}</em></button>
+                    {openTechnical.includes(task.id)&&<SupportList items={workSupport}/>} 
                     <h3>Aktiviteter</h3>
-                    <div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} technical={task.technical} expanded={openActivityId===activity.id} isNext={activity.id===nextActivityId} isFuture={!activity.done&&nextActivityIndex>=0&&index>nextActivityIndex} onToggle={()=>setOpenActivityId(current=>current===activity.id?null:activity.id)} onUpdate={updateActivity} onSaveField={saveField} onUpload={uploadFieldFile} onDeleteEntry={deleteDocumentationEntry}/>)}</div>
+                    <div className="activityFlow">{task.activities.map((activity,index)=><ActivityRow key={activity.id} activity={activity} index={index} task={task} expanded={openActivityId===activity.id} isNext={activity.id===nextActivityId} isFuture={!activity.done&&nextActivityIndex>=0&&index>nextActivityIndex} onToggle={()=>setOpenActivityId(current=>current===activity.id?null:activity.id)} onUpdate={updateActivity} onSaveField={saveField} onUpload={uploadFieldFile} onDeleteEntry={deleteDocumentationEntry}/>)}</div>
                     {(task.status==='todo'||task.status==='active')&&<button className="submitButton fullWidth" onClick={()=>void submit(task)}><span>➤</span><span><b>Skicka för kontroll</b><small>När allt är klart</small></span></button>}
                     {task.status==='review'&&canApprove&&canReject&&<ReviewActions task={task} onApprove={approve} onReject={reject}/>} 
                   </div>}
@@ -172,8 +173,9 @@ function ReviewActions({task,onApprove,onReject}:{task:Task;onApprove:(task:Task
   </div>;
 }
 
-function ActivityRow({activity,index,task,technical,expanded,isNext,isFuture,onToggle,onUpdate,onSaveField,onUpload,onDeleteEntry}:{activity:Activity;index:number;task:Task;technical:TechnicalItem[];expanded:boolean;isNext:boolean;isFuture:boolean;onToggle:()=>void;onUpdate:(taskId:string,activity:Activity)=>Promise<void>;onSaveField:(field:DocumentationField,payload:{valueText?:string|null;valueNumber?:number|null;valueBoolean?:boolean|null})=>Promise<void>;onUpload:(field:DocumentationField,file:File)=>Promise<boolean>;onDeleteEntry:(entry:DocumentationEntry)=>Promise<void>}){
-  const linked=technical.find(item=>item.id===activity.technicalResourceId);
+function ActivityRow({activity,index,task,expanded,isNext,isFuture,onToggle,onUpdate,onSaveField,onUpload,onDeleteEntry}:{activity:Activity;index:number;task:Task;expanded:boolean;isNext:boolean;isFuture:boolean;onToggle:()=>void;onUpdate:(taskId:string,activity:Activity)=>Promise<void>;onSaveField:(field:DocumentationField,payload:{valueText?:string|null;valueNumber?:number|null;valueBoolean?:boolean|null})=>Promise<void>;onUpload:(field:DocumentationField,file:File)=>Promise<boolean>;onDeleteEntry:(entry:DocumentationEntry)=>Promise<void>}){
+  const detailSupport=activity.detailSupport||[];
+  const legacyLinked=activity.technicalResourceId ? task.technical.find(item=>item.id===activity.technicalResourceId) : undefined;
   const readOnly=isFuture||task.status==='review'||task.status==='done';
   return <div className={`activityRow ${activity.done?'done':''} ${isNext?'next':''} ${isFuture?'future':''}`} data-activity-id={activity.id}>
     <div className="activityStep"><span>{activity.done?'✓':index+1}</span>{index<task.activities.length-1&&<i/>}</div>
@@ -183,7 +185,8 @@ function ActivityRow({activity,index,task,technical,expanded,isNext,isFuture,onT
         {activity.description&&<p>{activity.description}</p>}
         {isFuture&&<div className="futureNotice">Du kan läsa och förbereda den här aktiviteten nu, men den kan inte markeras klar förrän tidigare aktiviteter är färdiga.</div>}
         {activity.irreversible&&<div className="warning">⚠ Går inte att kontrollera i efterhand</div>}
-        {linked&&<ActivityDetailSupport item={linked}/>} 
+        {detailSupport.length>0&&<ActivityDetailSupport items={detailSupport}/>} 
+        {detailSupport.length===0&&legacyLinked&&<ActivityDetailSupport items={[legacyLinked]}/>} 
         {activity.documentationFields.length>0&&<div className="documentationFields"><h4>Dokumentation</h4>{activity.documentationFields.map(field=><DocumentationInput key={field.id} field={field} disabled={readOnly} onSave={onSaveField} onUpload={onUpload} onDeleteEntry={onDeleteEntry}/>)}</div>}
         {!readOnly&&<button className="activityAction" onClick={()=>void onUpdate(task.id,activity)}>{activity.done?'Markera som ej klar':activity.documentationFields.length>0?'Markera aktiviteten klar':'Markera klar'}</button>}
       </div>}
@@ -191,8 +194,8 @@ function ActivityRow({activity,index,task,technical,expanded,isNext,isFuture,onT
   </div>;
 }
 
-function ActivityDetailSupport({item}:{item:TechnicalItem}){
-  return <details className="detailSupport"><summary><span>🔎</span><span><b>Detaljunderlag</b><small>{item.title}</small></span><em>+</em></summary><div className="detailSupportBody">{item.summary&&<p>{item.summary}</p>}{item.revision&&<small>Revision: {item.revision}</small>}{item.details?.length?<ul>{item.details.map(detail=><li key={detail}>{detail}</li>)}</ul>:null}{(item.externalUrl||item.objectKey)&&<button type="button">Öppna underlaget</button>}</div></details>;
+function ActivityDetailSupport({items}:{items:SupportItem[]}){
+  return <details className="detailSupport"><summary><span>🔎</span><span><b>Detaljunderlag</b><small>{items.length===1?items[0].title:`${items.length} poster`}</small></span><em>+</em></summary><div className="detailSupportBody">{items.map(item=><article key={item.id}>{items.length>1&&<h4>{item.title}</h4>}{item.summary&&<p>{item.summary}</p>}{item.revision&&<small>Revision: {item.revision}</small>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}{(item.externalUrl||item.objectKey)&&<button type="button">Öppna underlaget</button>}</article>)}</div></details>;
 }
 
 function DocumentationInput({field,disabled,onSave,onUpload,onDeleteEntry}:{field:DocumentationField;disabled:boolean;onSave:(field:DocumentationField,payload:{valueText?:string|null;valueNumber?:number|null;valueBoolean?:boolean|null})=>Promise<void>;onUpload:(field:DocumentationField,file:File)=>Promise<boolean>;onDeleteEntry:(entry:DocumentationEntry)=>Promise<void>}){
@@ -219,6 +222,6 @@ function DocumentationInput({field,disabled,onSave,onUpload,onDeleteEntry}:{fiel
   return <label className="docField textField"><span><b>{field.label}</b>{field.helpText&&<small>{field.helpText}</small>}</span><textarea disabled={disabled} defaultValue={entry?.valueText??''} onBlur={event=>{if(!disabled)void onSave(field,{valueText:event.target.value||null});}}/></label>;
 }
 
-function TechnicalList({items}:{items:TechnicalItem[]}){return <div className="technicalList">{items.length===0&&<p>Inget arbetsunderlag är kopplat.</p>}{items.map(item=><article key={item.id}><span>{item.type==='drawing'?'▱':item.type==='image'?'▧':item.type==='document'?'▤':item.type==='material'?'▦':'i'}</span><div><small>{typeLabels[item.type]}{item.sourceLevel?` · ${levelLabels[item.sourceLevel]}`:''}</small><b>{item.title}</b>{item.summary&&<p>{item.summary}</p>}</div></article>)}</div>;}
+function SupportList({items}:{items:SupportItem[]}){return <div className="technicalList">{items.length===0&&<p>Inget arbetsunderlag är kopplat.</p>}{items.map(item=><article key={item.id}><span>{item.type==='drawing'?'▱':item.type==='image'?'▧':item.type==='document'?'▤':item.type==='material'?'▦':'i'}</span><div><small>{typeLabels[item.type]}{item.sourceLevel?` · ${levelLabels[item.sourceLevel]}`:''}</small><b>{item.title}</b>{item.summary&&<p>{item.summary}</p>}{item.details?.length?<ul>{item.details.map((detail,index)=><li key={`${item.id}:${index}`}>{detail}</li>)}</ul>:null}</div></article>)}</div>;}
 function ProjectChooser({projects,onChoose}:{projects:Project[];onChoose:(id:string)=>void}){return <main className="projectChooser"><strong>ByggPlan</strong>{projects.map(project=><button key={project.id} onClick={()=>onChoose(project.id)}>{project.name}</button>)}</main>;}
 function CenterState({text,retry}:{text:string;retry?:()=>void}){return <div className="centerState"><strong>ByggPlan</strong><p>{text}</p>{retry&&<button onClick={retry}>Försök igen</button>}</div>;}
