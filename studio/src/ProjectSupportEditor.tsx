@@ -53,7 +53,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
       const contentType=file.type||(file.name.toLowerCase().endsWith('.pdf')?'application/pdf':'');
       if(!contentType.startsWith('image/')&&contentType!=='application/pdf')throw new Error('Endast bilder och PDF-filer stöds just nu.');
 
-      const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}/file`;
+      const uploadUrl=`/api/u/${encodeURIComponent(item.id)}`;
       const probeResponse=await fetch(uploadUrl,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -61,7 +61,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
       });
       const probeRaw=await probeResponse.text();
       if(isCorporateBlockPage(probeRaw)){
-        throw new Error(`Nätverksfiltret blockerar själva uppladdningsadressen (${uploadUrl}), även utan filinnehåll. Det pekar på URL/site-kategorisering snarare än filtypen.`);
+        throw new Error(`Nätverksfiltret blockerar även den neutrala uppladdningsadressen (${uploadUrl}).`);
       }
       let probeData:{ok?:boolean;probe?:boolean;error?:string}={};
       try{probeData=probeRaw?JSON.parse(probeRaw):{};}catch{}
@@ -78,7 +78,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
       });
       const raw=await response.text();
       if(isCorporateBlockPage(raw)){
-        throw new Error('Uppladdningsadressen fungerar med ett litet JSON-anrop, men begäran blockeras när filinnehållet finns med. Det pekar på innehålls-/DLP-inspektion för just denna trafik, inte ett generellt förbud mot filuppladdning.');
+        throw new Error('Den neutrala adressen fungerar utan filinnehåll, men nätverksfiltret blockerar själva payloaden.');
       }
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
