@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 type ClassificationCategory = 'documentation' | 'control_plan' | 'requirement';
+type ExecutorType = 'self' | 'third_party';
 
 export type ActivityClassification = {
   id?: string;
@@ -10,6 +11,8 @@ export type ActivityClassification = {
   label: string;
   source?: string;
 };
+
+type ExecutionContext={context:'field'|'administrative';executor_type?:ExecutorType;executor_label?:string|null};
 
 const CATEGORY_OPTIONS: { value: ClassificationCategory; label: string; icon: string }[] = [
   { value: 'documentation', label: 'Dokumentationsändamål', icon: '📄' },
@@ -27,6 +30,10 @@ export function ClassificationEditor({ activityId }: { activityId: string }) {
   const [category, setCategory] = useState<ClassificationCategory>('documentation');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
+  const [executorType,setExecutorType]=useState<ExecutorType>('self');
+  const [executorLabel,setExecutorLabel]=useState('');
+  const [context,setContext]=useState<'field'|'administrative'>('field');
+  const [executorSaving,setExecutorSaving]=useState(false);
 
   useEffect(() => { void load(); }, [activityId]);
 
@@ -34,10 +41,20 @@ export function ClassificationEditor({ activityId }: { activityId: string }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/api/studio/activities/${activityId}/classifications`, { cache: 'no-store' });
-      const data = await response.json().catch(() => ({})) as { classifications?: ActivityClassification[]; error?: string };
-      if (!response.ok) throw new Error(data.error || 'Kunde inte läsa klassificeringarna.');
+      const [classificationResponse,executionResponse]=await Promise.all([
+        fetch(`${API_BASE}/api/studio/activities/${activityId}/classifications`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/studio/activities/${activityId}/execution-context`, { cache:'no-store' })
+      ]);
+      const data = await classificationResponse.json().catch(() => ({})) as { classifications?: ActivityClassification[]; error?: string };
+      if (!classificationResponse.ok) throw new Error(data.error || 'Kunde inte läsa klassificeringarna.');
       setItems(data.classifications || []);
+      if(executionResponse.ok){
+        const execution=await executionResponse.json() as {item?:ExecutionContext};
+        const item=execution.item;
+        setContext(item?.context||'field');
+        setExecutorType(item?.executor_type==='third_party'?'third_party':'self');
+        setExecutorLabel(item?.executor_label||'');
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Kunde inte läsa klassificeringarna.');
     } finally {
@@ -78,7 +95,35 @@ export function ClassificationEditor({ activityId }: { activityId: string }) {
     }
   }
 
+  async function saveExecutor(){
+    setExecutorSaving(true);setError('');
+    try{
+      const response=await fetch(`${API_BASE}/api/studio/activities/${activityId}/execution-context`,{
+        method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({context,executorType,executorLabel:executorType==='third_party'?(executorLabel.trim()||null):null})
+      });
+      const data=await response.json().catch(()=>({})) as {error?:string};
+      if(!response.ok)throw new Error(data.error||'Kunde inte spara utföraren.');
+      await load();
+    }catch(reason){setError(reason instanceof Error?reason.message:'Kunde inte spara utföraren.')}finally{setExecutorSaving(false)}
+  }
+
   return <div className="classificationEditor">
+    <section className="classificationGroup">
+      <div className="classificationHeading">
+        <div><small>UTFÖRARE</small><strong>Vem ska utföra aktiviteten?</strong></div>
+        <button type="button" onClick={()=>void saveExecutor()} disabled={executorSaving||loading}>{executorSaving?'Sparar…':'Spara utförare'}</button>
+      </div>
+      <div className="classificationAdd">
+        <select value={executorType} onChange={event=>setExecutorType(event.target.value as ExecutorType)}>
+          <option value="self">👤 Jag / egen regi</option>
+          <option value="third_party">👥 Tredje part</option>
+        </select>
+        {executorType==='third_party'&&<input value={executorLabel} onChange={event=>setExecutorLabel(event.target.value)} placeholder="Vem? t.ex. Kommun eller KA"/>}
+      </div>
+      <p className="classificationHelp">Telefonappen visar 👤 för egen regi och 👥 tillsammans med namnet för tredje part.</p>
+    </section>
+
     <div className="classificationHeading">
       <div><small>KLASSIFICERING</small><strong>Projektets användning av aktiviteten</strong></div>
       <button type="button" onClick={() => void save()} disabled={saving || loading}>{saving ? 'Sparar…' : 'Spara klassificering'}</button>
