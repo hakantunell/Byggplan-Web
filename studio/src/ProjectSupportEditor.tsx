@@ -59,6 +59,9 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
         body:JSON.stringify({name:file.name,contentType,dataBase64})
       });
       const raw=await response.text();
+      if(isCorporateBlockPage(raw)){
+        throw new Error('Filuppladdningen blockeras av nätverkets säkerhetsfilter. Text och övriga API-anrop fungerar, men bilder/PDF behöver laddas upp från ett nätverk där filöverföringen är tillåten.');
+      }
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
       if(!response.ok)throw new Error(data.error||raw||`Kunde inte ladda upp bilagan (HTTP ${response.status}).`);
@@ -114,9 +117,17 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
   </section>;
 }
 
+function isCorporateBlockPage(raw:string){
+  const value=raw.toLowerCase();
+  return value.includes('forsakringskassan.se/errorpage') ||
+    value.includes('kategorin "suspicious"') ||
+    value.includes('sidan &auml;r tyv&auml;rr blockerad') ||
+    value.includes('sidan är tyvärr blockerad');
+}
+
 async function fileToBase64(file:File){
   const bytes=new Uint8Array(await file.arrayBuffer());
-  const chunkSize=49152; // divisible by 3, so base64 chunks can be concatenated safely
+  const chunkSize=49152;
   let result='';
   for(let offset=0;offset<bytes.length;offset+=chunkSize){
     const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
