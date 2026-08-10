@@ -26,10 +26,20 @@ type SupportItem = {
   attachments?: Attachment[];
 };
 
+type GoverningDocumentLink = {
+  category:'control_plan'|'requirement';
+  code:string;
+  label:string;
+  source?:string;
+};
+
 type FieldActivity = {
   id: string;
   title:string;
   detailSupport?: SupportItem[];
+  executorType?:'self'|'third_party';
+  executorLabel?:string|null;
+  governingDocuments?:GoverningDocumentLink[];
 };
 
 type FieldTask = {
@@ -44,6 +54,7 @@ type ExecutionContextItem = {
   context:'field'|'administrative';
   executor_type?:'self'|'third_party';
   executor_label?:string|null;
+  governing_documents?:GoverningDocumentLink[];
 };
 
 function requestUrl(input: RequestInfo | URL) {
@@ -130,9 +141,12 @@ export function installProjectSupportBridge() {
           for(const activity of task.activities){
             const execution=executorByActivity.get(activity.id);
             if(!execution||execution.context==='administrative')continue;
-            activity.title=execution.executor_type==='third_party'
-              ?`👥${execution.executor_label?` ${execution.executor_label} ·`:''} ${activity.title}`
-              :`👤 ${activity.title}`;
+            activity.executorType=execution.executor_type||'self';
+            activity.executorLabel=execution.executor_label||null;
+            activity.governingDocuments=execution.governing_documents||[];
+            const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
+            const governingIcon=activity.governingDocuments.length?' 📋':'';
+            activity.title=`${responsibilityIcon}${governingIcon} ${activity.title}`;
           }
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
         }
@@ -148,7 +162,7 @@ export function installProjectSupportBridge() {
         headers
       });
     } catch (error) {
-      console.warn('Kunde inte berika fältappen med projektunderlag och aktivitetsklassning.', error);
+      console.warn('Kunde inte berika fältappen med projektunderlag, ansvar och styrdokumentskopplingar.', error);
       return response;
     }
   };
