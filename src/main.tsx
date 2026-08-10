@@ -10,6 +10,7 @@ import './uploads.css';
 import './demo-profile.css';
 import './supervisor.css';
 import './navigation.css';
+import './support-attachments.css';
 
 installDemoFetchIdentity();
 installProjectSupportBridge();
