@@ -27,10 +27,14 @@ type SupportItem = {
 };
 
 type GoverningDocumentLink = {
-  category:'control_plan'|'requirement';
+  documentId:string;
+  documentType:string;
+  documentTitle:string;
+  issuer?:string;
+  itemId:string;
   code:string;
   label:string;
-  source?:string;
+  responsibleRole?:string;
 };
 
 type FieldActivity = {
@@ -144,9 +148,11 @@ export function installProjectSupportBridge() {
             activity.executorType=execution.executor_type||'self';
             activity.executorLabel=execution.executor_label||null;
             activity.governingDocuments=execution.governing_documents||[];
-            const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
-            const governingIcon=activity.governingDocuments.length?' 📋':'';
-            activity.title=`${responsibilityIcon}${governingIcon} ${activity.title}`;
+
+            if(activity.governingDocuments.length>0){
+              const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
+              activity.title=`${responsibilityIcon} 📋 ${activity.title}`;
+            }
           }
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
         }
