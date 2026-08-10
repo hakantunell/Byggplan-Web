@@ -11,7 +11,7 @@ export async function onRequest(context: PagesContext): Promise<Response> {
   const incomingUrl = new URL(context.request.url);
 
   let targetPath = `/api/${path}`;
-  if (context.request.method === 'GET' && path === 'studio/structure') {
+  if (path === 'studio/structure') {
     const relay = incomingUrl.searchParams.get('__relay');
     if (relay?.startsWith('/api/')) targetPath = relay;
   }
