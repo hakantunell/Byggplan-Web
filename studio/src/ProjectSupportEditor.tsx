@@ -49,8 +49,15 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
   async function upload(item:Resource,file:File){
     setUploadingId(item.id);setMessage('Laddar upp bilaga…');
     try{
-      const form=new FormData();form.append('file',file,file.name);
-      const response=await fetch(`/api/studio/project-support/${encodeURIComponent(item.id)}/attachments`,{method:'POST',body:form});
+      if(file.size>20*1024*1024)throw new Error('Filen får vara högst 20 MB.');
+      const contentType=file.type||(file.name.toLowerCase().endsWith('.pdf')?'application/pdf':'');
+      if(!contentType.startsWith('image/')&&contentType!=='application/pdf')throw new Error('Endast bilder och PDF-filer stöds just nu.');
+      const dataBase64=await fileToBase64(file);
+      const response=await fetch(`/api/studio/project-support/${encodeURIComponent(item.id)}/file`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:file.name,contentType,dataBase64})
+      });
       const raw=await response.text();
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
@@ -105,6 +112,19 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
       {!editingId&&!resources.length&&<div className="projectSupportEmpty">Inget {label.toLowerCase()} har lagts in för detta projekt ännu.</div>}
     </div>}
   </section>;
+}
+
+async function fileToBase64(file:File){
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  const chunkSize=49152; // divisible by 3, so base64 chunks can be concatenated safely
+  let result='';
+  for(let offset=0;offset<bytes.length;offset+=chunkSize){
+    const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
+    let binary='';
+    for(let i=0;i<chunk.length;i++)binary+=String.fromCharCode(chunk[i]);
+    result+=btoa(binary);
+  }
+  return result;
 }
 
 function formatBytes(value:number){
