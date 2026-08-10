@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { DemoProfileSwitcher, installDemoFetchIdentity } from './DemoProfileSwitcher';
+import { installProjectSupportBridge } from './project-support-bridge';
 import './styles.css';
 import './responsive.css';
 import './layout-fixes.css';
@@ -11,6 +12,7 @@ import './supervisor.css';
 import './navigation.css';
 
 installDemoFetchIdentity();
+installProjectSupportBridge();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode><App /><DemoProfileSwitcher /></React.StrictMode>
