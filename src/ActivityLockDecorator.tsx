@@ -24,6 +24,7 @@ function decorateActivityLocks(items:LockItem[]){
     row.querySelectorAll<HTMLElement>('[data-dependency-disabled="true"]').forEach(element=>{
       if(element instanceof HTMLButtonElement||element instanceof HTMLInputElement||element instanceof HTMLTextAreaElement||element instanceof HTMLSelectElement)element.disabled=false;
       delete element.dataset.dependencyDisabled;
+      element.classList.remove('dependencyDisabled');
     });
 
     if(!lock?.locked)return;
@@ -81,12 +82,9 @@ export function ActivityLockDecorator(){
   },[projectId]);
 
   useEffect(()=>{
-    const apply=()=>decorateActivityLocks(locks);
-    apply();
-    const observer=new MutationObserver(()=>apply());
-    const root=document.getElementById('root');
-    if(root)observer.observe(root,{childList:true,subtree:true});
-    return()=>observer.disconnect();
+    decorateActivityLocks(locks);
+    const timer=window.setInterval(()=>decorateActivityLocks(locks),600);
+    return()=>window.clearInterval(timer);
   },[locks]);
 
   return null;
