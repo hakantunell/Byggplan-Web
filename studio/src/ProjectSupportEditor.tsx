@@ -55,16 +55,13 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
       const contentType=file.type||(file.name.toLowerCase().endsWith('.pdf')?'application/pdf':'');
       if(!contentType.startsWith('image/')&&contentType!=='application/pdf')throw new Error('Endast bilder och PDF-filer stöds just nu.');
 
-      const dataBase64=await fileToBase64(file);
+      const form=new FormData();
+      form.append('file',file,file.name);
       const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}`;
-      const response=await fetch(uploadUrl,{
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({operation:'addAttachment',name:file.name,contentType,dataBase64})
-      });
+      const response=await fetch(uploadUrl,{method:'PUT',body:form});
       const raw=await response.text();
       if(isCorporateBlockPage(raw)){
-        throw new Error('Nätverksfiltret tillåter samma adress när text sparas men blockerar begäran när bilageinnehåll skickas. Det pekar på payload-/DLP-inspektion, inte URL:en.');
+        throw new Error('Nätverksfiltret blockerar en vanlig standarduppladdning (multipart/form-data) till samma adress där textredigering fungerar. Det innebär att filtret sannolikt kräver att ByggPlan-domänen godkänns för filuppladdning.');
       }
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
@@ -128,19 +125,6 @@ function isCorporateBlockPage(raw:string){
     value.includes('kategorin "suspicious"') ||
     value.includes('sidan &auml;r tyv&auml;rr blockerad') ||
     value.includes('sidan är tyvärr blockerad');
-}
-
-async function fileToBase64(file:File){
-  const bytes=new Uint8Array(await file.arrayBuffer());
-  const chunkSize=49152;
-  let result='';
-  for(let offset=0;offset<bytes.length;offset+=chunkSize){
-    const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
-    let binary='';
-    for(let i=0;i<chunk.length;i++)binary+=String.fromCharCode(chunk[i]);
-    result+=btoa(binary);
-  }
-  return result;
 }
 
 function formatBytes(value:number){
