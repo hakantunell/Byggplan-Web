@@ -57,11 +57,11 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
 
       const form=new FormData();
       form.append('file',file,file.name);
-      const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}`;
-      const response=await fetch(uploadUrl,{method:'PUT',body:form});
+      const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}/attachments`;
+      const response=await fetch(uploadUrl,{method:'POST',body:form});
       const raw=await response.text();
       if(isCorporateBlockPage(raw)){
-        throw new Error('Nätverksfiltret blockerar en vanlig standarduppladdning (multipart/form-data) till samma adress där textredigering fungerar. Det innebär att filtret sannolikt kräver att ByggPlan-domänen godkänns för filuppladdning.');
+        throw new Error('Nätverksfiltret blockerar filuppladdning till ByggPlan från detta nät. Textredigering fungerar fortfarande; bilagor behöver laddas upp från ett nät där domänen är godkänd för filöverföring.');
       }
       let data:{error?:string}={};
       try{data=raw?JSON.parse(raw):{};}catch{}
