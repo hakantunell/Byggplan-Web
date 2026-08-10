@@ -51,8 +51,10 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
     try{
       const form=new FormData();form.append('file',file,file.name);
       const response=await fetch(`/api/studio/project-support/${encodeURIComponent(item.id)}/attachments`,{method:'POST',body:form});
-      const data=await response.json().catch(()=>({})) as {error?:string};
-      if(!response.ok)throw new Error(data.error||'Kunde inte ladda upp bilagan.');
+      const raw=await response.text();
+      let data:{error?:string}={};
+      try{data=raw?JSON.parse(raw):{};}catch{}
+      if(!response.ok)throw new Error(data.error||raw||`Kunde inte ladda upp bilagan (HTTP ${response.status}).`);
       await load();setMessage('Bilagan är uppladdad');window.setTimeout(()=>setMessage(''),1800);
     }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte ladda upp bilagan.');}
     finally{setUploadingId('');}
