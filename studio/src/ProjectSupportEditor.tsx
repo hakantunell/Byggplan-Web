@@ -57,7 +57,7 @@ export function ProjectSupportEditor({ ownerType, ownerId }: Props) {
 
       const form=new FormData();
       form.append('file',file,file.name);
-      const uploadUrl=`/api/studio/project-support/${encodeURIComponent(item.id)}/attachments`;
+      const uploadUrl=`/api/studio/support-attachments/${encodeURIComponent(item.id)}`;
       const response=await fetch(uploadUrl,{method:'POST',body:form});
       const raw=await response.text();
       if(isCorporateBlockPage(raw)){
