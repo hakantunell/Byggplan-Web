@@ -47,7 +47,7 @@ function requestUrl(input: RequestInfo | URL) {
   return new URL(String(input), window.location.origin);
 }
 
-function supportItem(resource: SupportResource): SupportItem {
+function supportItem(resource: SupportResource, apiOrigin: string): SupportItem {
   const content = resource.content_text?.trim();
   return {
     id: resource.id,
@@ -55,7 +55,10 @@ function supportItem(resource: SupportResource): SupportItem {
     type: 'text',
     summary: '',
     details: content ? content.split('\n') : [],
-    attachments: resource.attachments || []
+    attachments: (resource.attachments || []).map(file => ({
+      ...file,
+      url: new URL(file.url, apiOrigin).toString()
+    }))
   };
 }
 
@@ -93,12 +96,12 @@ export function installProjectSupportBridge() {
         for (const task of data.tasks) {
           task.workSupport = taskResources
             .filter(item => item.task_id === task.id)
-            .map(supportItem);
+            .map(item => supportItem(item,url.origin));
 
           for (const activity of task.activities) {
             activity.detailSupport = activityResources
               .filter(item => item.activity_id === activity.id)
-              .map(supportItem);
+              .map(item => supportItem(item,url.origin));
           }
         }
       }
