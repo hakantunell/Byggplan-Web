@@ -13,7 +13,6 @@ import './governing-mapping.css';
 import './governing-mapping-exception.css';
 import './studio-shell.css';
 import './master-projects.css';
-import './master-support.css';
 import './project-support.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
