@@ -1,3 +1,11 @@
+type Attachment = {
+  id: string;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+  url: string;
+};
+
 type SupportResource = {
   id: string;
   task_id?: string;
@@ -6,6 +14,7 @@ type SupportResource = {
   title: string;
   content_text: string;
   sort_order: number;
+  attachments?: Attachment[];
 };
 
 type SupportItem = {
@@ -14,6 +23,7 @@ type SupportItem = {
   type: 'text';
   summary: string;
   details: string[];
+  attachments?: Attachment[];
 };
 
 type FieldActivity = {
@@ -44,7 +54,8 @@ function supportItem(resource: SupportResource): SupportItem {
     title: resource.title,
     type: 'text',
     summary: '',
-    details: content ? content.split('\n') : []
+    details: content ? content.split('\n') : [],
+    attachments: resource.attachments || []
   };
 }
 
