@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { AppErrorBoundary } from './AppErrorBoundary';
 import { DemoProfileSwitcher, installDemoFetchIdentity } from './DemoProfileSwitcher';
 import { installProjectSupportBridge } from './project-support-bridge';
 import { ProjectDocumentsBar } from './ProjectDocumentsBar';
@@ -18,5 +19,9 @@ installDemoFetchIdentity();
 installProjectSupportBridge();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><App /><ProjectDocumentsBar /><DemoProfileSwitcher /></React.StrictMode>
+  <React.StrictMode>
+    <AppErrorBoundary><App /></AppErrorBoundary>
+    <ProjectDocumentsBar />
+    <DemoProfileSwitcher />
+  </React.StrictMode>
 );
