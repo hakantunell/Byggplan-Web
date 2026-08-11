@@ -89,6 +89,14 @@ export function GoverningMappingView({ projectId }: Props) {
     } finally { setBusyItemId(''); }
   }
 
+  function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
+    if (!suggestions.length) return null;
+    return <div className="mappingSuggestions"><b>{additional ? 'Ytterligare möjliga kopplingar' : 'Föreslagna matchningar'}</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
+      <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small></div>
+      <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id} onClick={() => void acceptSuggestion(item,suggestion)}>{additional ? 'Lägg till' : 'Koppla'}</button>
+    </div>)}</div>;
+  }
+
   if (!data) return <div className="mappingEmpty"><span>🧭</span><h2>Kartläggning</h2><p>{message || 'Läser projektets täckning…'}</p></div>;
   const selectedDocument = data.documents.find(document => document.id === selectedDocumentId);
 
@@ -129,11 +137,8 @@ export function GoverningMappingView({ projectId }: Props) {
           <div className="mappingItemBody">
             <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
             {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
-              : mapped ? <div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>
-              : suggestions.length ? <div className="mappingSuggestions"><b>Föreslagna matchningar</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
-                  <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small></div>
-                  <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id} onClick={() => void acceptSuggestion(item,suggestion)}>Koppla</button>
-                </div>)}</div>
+              : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
+              : suggestions.length ? renderSuggestions(item,suggestions,false)
               : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.</span></div>}
           </div>
         </article>;
