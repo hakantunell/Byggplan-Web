@@ -20,7 +20,9 @@ function rewriteApiUrl(value: string, method: string): string {
     const isStudioHost = url.origin === window.location.origin;
     if (!url.pathname.startsWith('/api/') || (!isApiHost && !isStudioHost)) return value;
 
-    const relayRead = method === 'GET' && url.pathname !== '/api/studio/structure';
+    // The project list must stay as a plain same-origin URL. Some restrictive
+    // networks reject the previous encoded __relay=/api/projects query string.
+    const relayRead = method === 'GET' && url.pathname !== '/api/studio/structure' && url.pathname !== '/api/projects';
     const relayWrite = shouldRelayWrite(url.pathname,method);
     if (relayRead || relayWrite) {
       const relay = new URL('/api/studio/structure', window.location.origin);
