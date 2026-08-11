@@ -4,6 +4,7 @@ import './same-origin-api';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { StudioShell } from './StudioShell';
 import { ProjectOverviewExtras } from './ProjectOverviewExtras';
+import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import './styles.css';
 import './palette.css';
 import './classifications.css';
@@ -27,5 +28,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <StudioShell />
     <ProjectOverviewExtras />
+    <MasterV2UpgradeAction />
   </React.StrictMode>
 );
