@@ -19,6 +19,7 @@ import './project-support.css';
 import './project-documents.css';
 import './project-administration.css';
 import './governing-import-action.css';
+import './governing-analysis-action.css';
 
 installExecutionContextBridge();
 
