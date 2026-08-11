@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { GoverningDocumentsView } from './GoverningDocumentsView';
 import { GoverningMappingView } from './GoverningMappingView';
 import { GoverningDocumentsImportAction } from './GoverningDocumentsImportAction';
+import { GoverningDocumentAnalysisAction } from './GoverningDocumentAnalysisAction';
 
 type Props = { projectId: string };
 type Tab = 'documents' | 'mapping';
@@ -16,7 +17,7 @@ export function GoverningDocumentsWorkspace({ projectId }: Props) {
       {tab === 'documents' && <GoverningDocumentsImportAction projectId={projectId} />}
     </div>
     <div className="governingWorkspaceBody">
-      {tab === 'documents' ? <GoverningDocumentsView projectId={projectId} /> : <GoverningMappingView projectId={projectId} />}
+      {tab === 'documents' ? <><GoverningDocumentsView projectId={projectId} /><GoverningDocumentAnalysisAction projectId={projectId} onOpenMapping={()=>setTab('mapping')} /></> : <GoverningMappingView projectId={projectId} />}
     </div>
   </div>;
 }
