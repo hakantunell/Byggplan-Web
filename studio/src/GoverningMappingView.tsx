@@ -22,6 +22,7 @@ type Suggestion = {
   activity_id: string; title: string; task_title: string; section_name: string; area_name: string; confidence: number;
 };
 type MappingResponse = {
+  runtime?: string;
   summary: MappingSummary; documents: MappingDocument[]; items: MappingItem[]; activities: MappingActivity[];
   suggestions: Record<string,Suggestion[]>; error?: string;
 };
@@ -93,7 +94,7 @@ export function GoverningMappingView({ projectId }: Props) {
 
   return <div className="mappingView">
     <header className="mappingHeader">
-      <div><small>KARTLÄGGNING</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p></div>
+      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p></div>
       <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span></div>
     </header>
 
