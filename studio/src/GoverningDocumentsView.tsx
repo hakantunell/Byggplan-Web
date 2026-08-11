@@ -133,29 +133,34 @@ export function GoverningDocumentsView({ projectId }: Props) {
   }
 
   async function loadDocument(id: string) {
-    setLoading(true);
+    setLoading(true); setMessage('');
     try {
-      const [documentResponse, verificationResponse] = await Promise.all([
-        fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}`, { cache: 'no-store' }),
-        fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}/verification-map`, { cache: 'no-store' })
-      ]);
+      const documentResponse = await fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}`, { cache: 'no-store' });
       const data = await documentResponse.json().catch(() => ({})) as { document?: GoverningDocument; items?: GoverningItem[]; error?: string };
-      const verificationData = await verificationResponse.json().catch(() => ({})) as {
-        verifications?: VerificationStep[]; source?: SourceInfo[]; status?: Record<string,string>; error?: string
-      };
       if (!documentResponse.ok) throw new Error(data.error || 'Kunde inte läsa det styrande dokumentet.');
-      if (!verificationResponse.ok) throw new Error(verificationData.error || 'Kunde inte läsa verifieringsflödet.');
 
-      const nextItems = data.items || []; const verificationMap: Record<string, VerificationStep[]> = {};
-      for (const step of verificationData.verifications || []) (verificationMap[step.governing_item_id] ||= []).push(step);
-      const sourceMap: Record<string, SourceInfo> = {};
-      for (const source of verificationData.source || []) sourceMap[source.id] = source;
-
-      setDetail(data.document || null); setItems(nextItems); setVerifications(verificationMap);
-      setSourceInfo(sourceMap); setDerivedStatus(verificationData.status || {});
+      const nextItems = data.items || [];
+      setDetail(data.document || null); setItems(nextItems);
+      setVerifications({}); setSourceInfo({}); setDerivedStatus({});
       setCollapsedSections(new Set(nextItems.map(item => `${item.section_code || 'Ö'}:${item.section_title || 'Övriga poster'}`)));
       setLinkItemId(''); setLinkActivities([]); setHistoryItemId('');
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Kunde inte läsa det styrande dokumentet.'); }
+
+      try {
+        const verificationResponse = await fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}/verification-map`, { cache: 'no-store' });
+        const verificationData = await verificationResponse.json().catch(() => ({})) as {
+          verifications?: VerificationStep[]; source?: SourceInfo[]; status?: Record<string,string>; error?: string
+        };
+        if (!verificationResponse.ok) throw new Error(verificationData.error || 'Kunde inte läsa verifieringsflödet.');
+        const verificationMap: Record<string, VerificationStep[]> = {};
+        for (const step of verificationData.verifications || []) (verificationMap[step.governing_item_id] ||= []).push(step);
+        const sourceMap: Record<string, SourceInfo> = {};
+        for (const source of verificationData.source || []) sourceMap[source.id] = source;
+        setVerifications(verificationMap); setSourceInfo(sourceMap); setDerivedStatus(verificationData.status || {});
+      } catch (verificationError) {
+        const text = verificationError instanceof Error ? verificationError.message : 'Kunde inte läsa verifieringsflödet.';
+        setMessage(`Dokumentet är inläst, men verifieringsdelen kunde inte hämtas: ${text}`);
+      }
+    } catch (error) { setDetail(null); setItems([]); setMessage(error instanceof Error ? error.message : 'Kunde inte läsa det styrande dokumentet.'); }
     finally { setLoading(false); }
   }
 
