@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ProjectDocumentsEditor } from './ProjectDocumentsEditor';
 import { ProjectAdministrationEditor } from './ProjectAdministrationEditor';
 import { ProjectDeleteControl } from './ProjectDeleteControl';
+import { GoverningDocumentsEditor } from './GoverningDocumentsEditor';
 
 export function ProjectOverviewExtras(){
   const[target,setTarget]=useState<Element|null>(null);const[projectId,setProjectId]=useState('');const[projectName,setProjectName]=useState('');
@@ -17,5 +18,5 @@ export function ProjectOverviewExtras(){
     sync();const timer=window.setInterval(sync,250);return()=>window.clearInterval(timer);
   },[]);
   if(!target||!projectId)return null;
-  return createPortal(<div className="projectOverviewExtras"><ProjectAdministrationEditor projectId={projectId}/><ProjectDocumentsEditor projectId={projectId}/><ProjectDeleteControl projectId={projectId} projectName={projectName||'Projekt'}/></div>,target);
+  return createPortal(<div className="projectOverviewExtras"><ProjectAdministrationEditor projectId={projectId}/><GoverningDocumentsEditor projectId={projectId}/><ProjectDocumentsEditor projectId={projectId}/><ProjectDeleteControl projectId={projectId} projectName={projectName||'Projekt'}/></div>,target);
 }
