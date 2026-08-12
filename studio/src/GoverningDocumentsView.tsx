@@ -45,6 +45,19 @@ type Props = { projectId: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
 
+function delay(ms:number){return new Promise<void>(resolve=>window.setTimeout(resolve,ms))}
+async function fetchWithTransientRetry(input:RequestInfo|URL,init?:RequestInit){
+  let lastError:unknown;
+  for(let attempt=0;attempt<3;attempt+=1){
+    try{
+      const response=await fetch(input,init);
+      if(response.status<500||attempt===2)return response;
+    }catch(error){lastError=error;if(attempt===2)throw error}
+    await delay(250*(attempt+1));
+  }
+  throw lastError instanceof Error?lastError:new Error('Tillfälligt fel vid hämtning.');
+}
+
 const DERIVED_STATUS_LABELS: Record<string,string> = {
   waiting_activity: 'Väntar på aktivitet',
   in_progress: 'Pågår',
@@ -146,7 +159,7 @@ export function GoverningDocumentsView({ projectId }: Props) {
       setLinkItemId(''); setLinkActivities([]); setHistoryItemId('');
 
       try {
-        const verificationResponse = await fetch(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}/verification-map`, { cache: 'no-store' });
+        const verificationResponse = await fetchWithTransientRetry(`${API_BASE}/api/studio/governing-documents/${encodeURIComponent(id)}/verification-map`, { cache: 'no-store' });
         const verificationData = await verificationResponse.json().catch(() => ({})) as {
           verifications?: VerificationStep[]; source?: SourceInfo[]; status?: Record<string,string>; error?: string
         };
@@ -257,7 +270,6 @@ export function GoverningDocumentsView({ projectId }: Props) {
   function toggleSection(key: string) {
     setCollapsedSections(current => { const next = new Set(current); next.has(key) ? next.delete(key) : next.add(key); return next; });
   }
-
   return <div className="governingPrimaryView">
     <aside className="governingListPanel">
       <div className="governingListHeader"><small>STYRANDE DOKUMENT</small><strong>Projektets dokument</strong></div>
