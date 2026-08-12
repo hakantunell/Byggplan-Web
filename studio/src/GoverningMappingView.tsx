@@ -26,6 +26,7 @@ type MappingResponse = {
   summary: MappingSummary; documents: MappingDocument[]; items: MappingItem[]; activities: MappingActivity[];
   suggestions: Record<string,Suggestion[]>; error?: string;
 };
+type DeliveryMode='self_build'|'general_contractor'|'split_contract'|'undecided';
 type Props = { projectId: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
@@ -36,10 +37,13 @@ const DOCUMENT_LABELS: Record<string,string> = {
 const EXCEPTION_LABELS: Record<string,string> = {
   not_applicable: 'Ej tillämplig (N/A)', cannot_verify: 'Kan inte verifieras', alternative_evidence: 'Ersatt av annat underlag'
 };
+const DELIVERY_LABELS:Record<DeliveryMode,string>={self_build:'Egen regi',general_contractor:'General-/totalentreprenad',split_contract:'Delad entreprenad',undecided:'Inte bestämt'};
 const isException = (item: MappingItem) => Boolean(EXCEPTION_LABELS[item.handling_status]);
+const isTotalContractorItem=(item:MappingItem)=>/totalentreprenör/i.test(item.description||'');
 
 export function GoverningMappingView({ projectId }: Props) {
   const [data, setData] = useState<MappingResponse | null>(null);
+  const [deliveryMode,setDeliveryMode]=useState<DeliveryMode>('undecided');
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [filter, setFilter] = useState<'all'|'uncovered'|'mapped'|'exceptions'>('uncovered');
   const [busyItemId, setBusyItemId] = useState('');
@@ -50,14 +54,24 @@ export function GoverningMappingView({ projectId }: Props) {
   async function load() {
     if (!projectId) return;
     try {
-      const response = await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-mapping`, { cache: 'no-store' });
+      const [response,contextResponse]=await Promise.all([
+        fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-mapping`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/context`,{cache:'no-store'})
+      ]);
       const next = await response.json().catch(() => ({})) as MappingResponse;
       if (!response.ok) throw new Error(next.error || 'Kunde inte läsa kartläggningen.');
+      const contextData=await contextResponse.json().catch(()=>({})) as {context?:{deliveryMode?:DeliveryMode}};
+      if(contextResponse.ok)setDeliveryMode(contextData.context?.deliveryMode||'undecided');
       setData(next);
       setSelectedDocumentId(current => next.documents.some(document => document.id === current) ? current : next.documents[0]?.id || '');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte läsa kartläggningen.');
     }
+  }
+
+  async function changeDeliveryMode(mode:DeliveryMode){
+    setDeliveryMode(mode);setMessage('');
+    try{const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/context`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({deliveryMode:mode})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte spara genomförandeformen.');setMessage(`Genomförandeform: ${DELIVERY_LABELS[mode]}.`)}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte spara genomförandeformen.')}
   }
 
   const visibleItems = useMemo(() => {
@@ -89,6 +103,11 @@ export function GoverningMappingView({ projectId }: Props) {
     } finally { setBusyItemId(''); }
   }
 
+  async function acceptSelfBuildException(item:MappingItem){
+    setBusyItemId(item.id);setMessage('');const reason='Projektet genomförs i egen regi och någon totalentreprenör finns därför inte.';
+    try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'not_applicable',handlingComment:reason})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte markera posten som ej tillämplig.');setMessage(`${item.code||'Posten'} markerades som ej tillämplig utifrån projektets genomförandeform.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera undantaget.')}finally{setBusyItemId('')}
+  }
+
   function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
     if (!suggestions.length) return null;
     return <div className="mappingSuggestions"><b>{additional ? 'Ytterligare möjliga kopplingar' : 'Föreslagna matchningar'}</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
@@ -102,7 +121,7 @@ export function GoverningMappingView({ projectId }: Props) {
 
   return <div className="mappingView">
     <header className="mappingHeader">
-      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p></div>
+      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p><label style={{display:'inline-flex',gap:8,alignItems:'center'}}><span>Genomförandeform</span><select value={deliveryMode} onChange={e=>void changeDeliveryMode(e.target.value as DeliveryMode)}><option value="undecided">Inte bestämt</option><option value="self_build">Egen regi</option><option value="general_contractor">General-/totalentreprenad</option><option value="split_contract">Delad entreprenad</option></select></label></div>
       <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span></div>
     </header>
 
@@ -131,6 +150,7 @@ export function GoverningMappingView({ projectId }: Props) {
         const mapped = Number(item.mapped_activity_count || 0) > 0;
         const exception = isException(item);
         const suggestions = data.suggestions[item.id] || [];
+        const selfBuildException=deliveryMode==='self_build'&&isTotalContractorItem(item)&&!mapped&&!exception;
         const stateClass = exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
           <div className="mappingState" title={exception ? 'Hanterad som undantag' : mapped ? 'Kopplad till aktivitet' : 'Saknar aktivitet'}>{exception ? '—' : mapped ? '✓' : '!'}</div>
@@ -138,6 +158,7 @@ export function GoverningMappingView({ projectId }: Props) {
             <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
             {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
+              : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
               : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.</span></div>}
           </div>
