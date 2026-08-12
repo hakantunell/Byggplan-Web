@@ -48,7 +48,11 @@ type FieldActivity = {
 
 type FieldTask = {
   id: string;
-  workArea: string;
+  title:string;
+  workAreaId:string;
+  workArea:string;
+  workSectionId:string;
+  workSection:string;
   activities: FieldActivity[];
   workSupport?: SupportItem[];
 };
@@ -85,6 +89,10 @@ async function fetchWithTimeout(baseFetch:typeof window.fetch,input:RequestInfo|
   const controller=new AbortController();
   const timer=window.setTimeout(()=>controller.abort(),timeoutMs);
   try{return await baseFetch(input,{...init,signal:controller.signal})}finally{window.clearTimeout(timer)}
+}
+
+function appendGoverningCount(label:string,count:number){
+  return count>0?`${label}  📋 ${count}`:label;
 }
 
 export function installProjectSupportBridge() {
@@ -157,6 +165,23 @@ export function installProjectSupportBridge() {
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
         }
         data.tasks=data.tasks.filter(task=>task.activities.length>0);
+
+        const governedByTask=new Map<string,number>();
+        const governedBySection=new Map<string,number>();
+        const governedByArea=new Map<string,number>();
+        for(const task of data.tasks){
+          const count=task.activities.filter(activity=>(activity.governingDocuments||[]).length>0).length;
+          governedByTask.set(task.id,count);
+          if(count>0){
+            governedBySection.set(task.workSectionId,(governedBySection.get(task.workSectionId)||0)+count);
+            governedByArea.set(task.workAreaId,(governedByArea.get(task.workAreaId)||0)+count);
+          }
+        }
+        for(const task of data.tasks){
+          task.title=appendGoverningCount(task.title,governedByTask.get(task.id)||0);
+          task.workSection=appendGoverningCount(task.workSection,governedBySection.get(task.workSectionId)||0);
+          task.workArea=appendGoverningCount(task.workArea,governedByArea.get(task.workAreaId)||0);
+        }
       }
 
       const headers = new Headers(response.headers);
