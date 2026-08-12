@@ -7,6 +7,7 @@ type StudioView = 'project' | 'governing-documents' | 'master-projects';
 type Project = { id: string; name: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.byggplan.tunell.org').replace(/\/$/, '');
+const PROJECT_STORAGE_KEY = 'byggplan.studio.projectId';
 
 function ProjectRailBridge({ onOpenGoverningDocuments, onOpenMasterProjects }: { onOpenGoverningDocuments: () => void; onOpenMasterProjects: () => void }) {
   useEffect(() => {
@@ -53,6 +54,41 @@ function ProjectRailBridge({ onOpenGoverningDocuments, onOpenMasterProjects }: {
   return null;
 }
 
+function ProjectSelectionBridge({ projectId, onProjectChange }: { projectId: string; onProjectChange: (id: string) => void }) {
+  useEffect(() => {
+    let select: HTMLSelectElement | null = null;
+
+    const handleChange = () => {
+      const next = select?.value || '';
+      if (next && next !== projectId) onProjectChange(next);
+    };
+
+    const sync = () => {
+      const nextSelect = document.querySelector('.studio .topbar select') as HTMLSelectElement | null;
+      if (nextSelect !== select) {
+        select?.removeEventListener('change', handleChange);
+        select = nextSelect;
+        select?.addEventListener('change', handleChange);
+      }
+      if (!select || !projectId) return;
+      const optionExists = Array.from(select.options).some(option => option.value === projectId);
+      if (optionExists && select.value !== projectId) {
+        select.value = projectId;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    };
+
+    sync();
+    const timer = window.setInterval(sync, 100);
+    return () => {
+      window.clearInterval(timer);
+      select?.removeEventListener('change', handleChange);
+    };
+  }, [projectId, onProjectChange]);
+
+  return null;
+}
+
 export function StudioShell() {
   const [view, setView] = useState<StudioView>('project');
   const [projects, setProjects] = useState<Project[]>([]);
@@ -62,39 +98,46 @@ export function StudioShell() {
     void loadProjects();
   }, []);
 
+  function selectProject(id: string) {
+    if (!id) return;
+    setProjectId(id);
+    try { window.localStorage.setItem(PROJECT_STORAGE_KEY, id); } catch { /* ignore unavailable storage */ }
+  }
+
   async function loadProjects(selectId?: string) {
     try {
       const response = await fetch(`${API_BASE}/api/projects`, { cache: 'no-store' });
       const data = await response.json() as { projects?: Project[] };
       const next = data.projects || [];
       setProjects(next);
-      setProjectId(current => selectId && next.some(project => project.id === selectId) ? selectId : current || next[0]?.id || '');
+      let stored = '';
+      try { stored = window.localStorage.getItem(PROJECT_STORAGE_KEY) || ''; } catch { /* ignore unavailable storage */ }
+      setProjectId(current => {
+        const candidate =
+          (selectId && next.some(project => project.id === selectId) ? selectId : '') ||
+          (current && next.some(project => project.id === current) ? current : '') ||
+          (stored && next.some(project => project.id === stored) ? stored : '') ||
+          next[0]?.id || '';
+        if (candidate) {
+          try { window.localStorage.setItem(PROJECT_STORAGE_KEY, candidate); } catch { /* ignore unavailable storage */ }
+        }
+        return candidate;
+      });
     } catch {
       setProjects([]);
     }
   }
 
   function openCreatedProject(createdProjectId: string) {
+    selectProject(createdProjectId);
     void loadProjects(createdProjectId);
     setView('project');
-    let attempts = 0;
-    const selectWhenReady = () => {
-      const select = document.querySelector('.studio .topbar select') as HTMLSelectElement | null;
-      const optionExists = select ? Array.from(select.options).some(option => option.value === createdProjectId) : false;
-      if (select && optionExists) {
-        select.value = createdProjectId;
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        return;
-      }
-      attempts += 1;
-      if (attempts < 50) window.setTimeout(selectWhenReady, 100);
-    };
-    window.setTimeout(selectWhenReady, 50);
   }
 
   if (view === 'project') {
     return <div className="studioShell view-project">
       <StudioWorkspace />
+      <ProjectSelectionBridge projectId={projectId} onProjectChange={selectProject} />
       <ProjectRailBridge onOpenGoverningDocuments={() => setView('governing-documents')} onOpenMasterProjects={() => setView('master-projects')} />
     </div>;
   }
@@ -106,7 +149,7 @@ export function StudioShell() {
     <div className="controlPlanStudioFrame">
       <header className="topbar controlPlanTopbar">
         <div className="brand"><span>BP</span><div><strong>ByggPlan Studio</strong><small>{masterView ? 'Masterprojekt' : 'Projekteditor'}</small></div></div>
-        {!masterView && <select value={projectId} onChange={event => setProjectId(event.target.value)}>
+        {!masterView && <select value={projectId} onChange={event => selectProject(event.target.value)}>
           {projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
         </select>}
         {masterView && <div className="masterTopbarLabel">Bibliotek</div>}
