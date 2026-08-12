@@ -68,6 +68,7 @@ export function GoverningMappingView({ projectId }: Props) {
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
   const [filter, setFilter] = useState<'all'|'uncovered'|'mapped'|'exceptions'|'conditions'>('uncovered');
   const [busyItemId, setBusyItemId] = useState('');
+  const [bulkBusy,setBulkBusy]=useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => { void load(); }, [projectId]);
@@ -105,6 +106,14 @@ export function GoverningMappingView({ projectId }: Props) {
     });
   }, [data, selectedDocumentId, filter]);
 
+  const reviewedPendingCount=useMemo(()=>{
+    if(!data)return 0;
+    return data.items.filter(item=>{
+      if(Number(item.mapped_activity_count||0)>0||isException(item)||isProjectConditionHandled(item))return false;
+      return Boolean(item.project_condition)||(data.suggestions[item.id]||[]).length>0;
+    }).length;
+  },[data]);
+
   async function acceptSuggestion(item: MappingItem, suggestion: Suggestion) {
     setBusyItemId(item.id); setMessage('');
     try {
@@ -132,11 +141,28 @@ export function GoverningMappingView({ projectId }: Props) {
     try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'handled',handlingComment:'Hanteras som ett bestående projektvillkor och visas under Projektvillkor.'})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte hantera posten som projektvillkor.');setMessage(`${item.code||'Posten'} hanteras nu som projektvillkor.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera projektvillkoret.')}finally{setBusyItemId('')}
   }
 
+  async function applyReviewedMapping(){
+    if(!data||bulkBusy)return;
+    const pending=data.items.filter(item=>Number(item.mapped_activity_count||0)===0&&!isException(item)&&!isProjectConditionHandled(item)&&Boolean(item.project_condition||(data.suggestions[item.id]||[]).length));
+    if(!pending.length){setMessage('Det finns inga granskade förslag kvar att tillämpa.');return}
+    setBulkBusy(true);setMessage(`Tillämpar granskad kartläggning för ${pending.length} poster…`);
+    let linked=0,conditions=0;
+    try{
+      const jobs:(()=>Promise<void>)[]=[];
+      for(const item of pending){
+        if(item.project_condition){jobs.push(async()=>{const r=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'handled',handlingComment:'Hanteras som ett bestående projektvillkor och visas under Projektvillkor.'})});const x=await r.json().catch(()=>({})) as {error?:string};if(!r.ok)throw new Error(x.error||`Kunde inte registrera ${item.code||'projektvillkor'}.`);conditions+=1});continue}
+        for(const suggestion of data.suggestions[item.id]||[]){jobs.push(async()=>{const r=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}/mappings/${encodeURIComponent(suggestion.activity_id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({mappingSource:'suggested',confidence:suggestion.confidence,comment:'Accepterad efter gemensam granskning av mapping-v17'})});const x=await r.json().catch(()=>({})) as {error?:string};if(!r.ok)throw new Error(x.error||`Kunde inte koppla ${item.code||'posten'}.`);linked+=1})}
+      }
+      for(let i=0;i<jobs.length;i+=8)await Promise.all(jobs.slice(i,i+8).map(job=>job()));
+      await load();setMessage(`Klart: ${linked} aktivitetskopplingar skapades och ${conditions} projektvillkor registrerades.`);
+    }catch(error){await load();setMessage(error instanceof Error?`Delvis genomfört: ${error.message}`:'Kartläggningen kunde inte tillämpas fullt ut.')}finally{setBulkBusy(false)}
+  }
+
   function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
     if (!suggestions.length) return null;
     return <div className="mappingSuggestions"><b>{additional ? 'Ytterligare möjliga kopplingar' : 'Föreslagna matchningar'}</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
       <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small>{suggestion.condition_text&&<small>Villkor: {suggestion.condition_text}</small>}</div>
-      <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id} onClick={() => void acceptSuggestion(item,suggestion)}>{additional ? 'Lägg till' : 'Koppla'}</button>
+      <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id||bulkBusy} onClick={() => void acceptSuggestion(item,suggestion)}>{additional ? 'Lägg till' : 'Koppla'}</button>
     </div>)}</div>;
   }
 
@@ -146,7 +172,7 @@ export function GoverningMappingView({ projectId }: Props) {
   return <div className="mappingView">
     <header className="mappingHeader">
       <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet, uttryckligen hanterad som undantag eller registrerad som ett rent projektvillkor.</p><div className="mappingProjectContext"><span>Projektkontext</span><strong>{DELIVERY_LABELS[deliveryMode]}</strong><small>Ändras i projektets konfiguration, inte i kartläggningen.</small></div></div>
-      <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span></div>
+      <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span>{reviewedPendingCount>0&&<button disabled={bulkBusy} onClick={()=>void applyReviewedMapping()}>{bulkBusy?'Tillämpar…':`Tillämpa granskad kartläggning (${reviewedPendingCount})`}</button>}</div>
     </header>
 
     <div className="mappingProgress"><div style={{ width: `${data.summary.coverage_percent}%` }} /></div>
@@ -189,9 +215,9 @@ export function GoverningMappingView({ projectId }: Props) {
             {handledCondition ? <div className="mappedActivities"><b>Projektvillkor</b><span>Registrerat som ett bestående villkor för projektet. Ingen separat aktivitet krävs enbart för att bära villkoret.</span></div>
               : exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
-              : item.project_condition ? <div className="mappingNoSuggestion"><b>Rent projektvillkor</b><span>Villkoret ska finnas kvar som styrande information för projektet men behöver inget eget arbetskort.</span><button disabled={busyItemId===item.id} onClick={()=>void markProjectCondition(item)}>Hantera som projektvillkor</button></div>
-              : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
-              : contextException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>{item.context_exception?.reason}</span><button disabled={busyItemId===item.id} onClick={()=>void acceptContextException(item)}>Markera ej tillämplig</button></div>
+              : item.project_condition ? <div className="mappingNoSuggestion"><b>Rent projektvillkor</b><span>Villkoret ska finnas kvar som styrande information för projektet men behöver inget eget arbetskort.</span><button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void markProjectCondition(item)}>Hantera som projektvillkor</button></div>
+              : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
+              : contextException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>{item.context_exception?.reason}</span><button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void acceptContextException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
               : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{primary==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':primary==='condition'?'Posten innehåller ett villkor som också kan behöva kopplas till relevant kontroll eller aktivitet.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
           </div>
