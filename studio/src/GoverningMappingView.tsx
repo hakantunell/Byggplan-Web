@@ -9,11 +9,14 @@ type MappingDocument = {
   item_count: number; mapped_count: number; exception_count: number; covered_count: number;
   uncovered_count: number; coverage_percent: number;
 };
-type HandlingKind='work'|'control'|'administration'|'condition'|'operation';
+type HandlingKind='work'|'control'|'administration'|'condition'|'operation'|'evidence'|'deadline';
+type ContextException={status:string;reason:string};
 type MappingItem = {
   id: string; governing_document_id: string; code: string; description: string; section_code: string;
   section_title: string; item_type: string; responsible_role: string; handling_status: string;
-  handling_kind?: HandlingKind; source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
+  handling_kind?: HandlingKind; handling_kinds?:HandlingKind[]; evidence_type?:string|null; timing_label?:string;
+  context_exception?:ContextException|null; interpretation_note?:string;
+  source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
 };
 type MappingActivity = {
   id: string; title: string; description: string; activity_type: string; task_title: string;
@@ -40,8 +43,8 @@ const EXCEPTION_LABELS: Record<string,string> = {
   not_applicable: 'Ej tillämplig (N/A)', cannot_verify: 'Kan inte verifieras', alternative_evidence: 'Ersatt av annat underlag'
 };
 const DELIVERY_LABELS:Record<DeliveryMode,string>={self_build:'Egen regi',general_contractor:'General-/totalentreprenad',split_contract:'Delad entreprenad',undecided:'Inte bestämt'};
-const HANDLING_LABELS:Record<HandlingKind,string>={work:'Arbete',control:'Kontroll',administration:'Administration / dokumentation',condition:'Projektvillkor',operation:'Drift / förvaltning'};
-const HANDLING_ICONS:Record<HandlingKind,string>={work:'●',control:'✓',administration:'🗂',condition:'◆',operation:'↻'};
+const HANDLING_LABELS:Record<HandlingKind,string>={work:'Arbete / åtgärd',control:'Kontroll',administration:'Administration / dokumentation',condition:'Projektvillkor',operation:'Drift / förvaltning',evidence:'Bevis i fält',deadline:'Tidsfrist / milstolpe'};
+const HANDLING_ICONS:Record<HandlingKind,string>={work:'🔨',control:'✓',administration:'🗂',condition:'◆',operation:'↻',evidence:'📷',deadline:'⏱'};
 const isException = (item: MappingItem) => Boolean(EXCEPTION_LABELS[item.handling_status]);
 const isTotalContractorItem=(item:MappingItem)=>/totalentreprenör/i.test(item.description||'');
 
@@ -102,10 +105,12 @@ export function GoverningMappingView({ projectId }: Props) {
     } finally { setBusyItemId(''); }
   }
 
-  async function acceptSelfBuildException(item:MappingItem){
-    setBusyItemId(item.id);setMessage('');const reason='Projektet genomförs i egen regi och någon totalentreprenör finns därför inte.';
-    try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'not_applicable',handlingComment:reason})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte markera posten som ej tillämplig.');setMessage(`${item.code||'Posten'} markerades som ej tillämplig utifrån projektets genomförandeform.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera undantaget.')}finally{setBusyItemId('')}
+  async function markNotApplicable(item:MappingItem,reason:string,label:string){
+    setBusyItemId(item.id);setMessage('');
+    try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'not_applicable',handlingComment:reason})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte markera posten som ej tillämplig.');setMessage(`${item.code||'Posten'} markerades som ej tillämplig ${label}.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera undantaget.')}finally{setBusyItemId('')}
   }
+  async function acceptSelfBuildException(item:MappingItem){return markNotApplicable(item,'Projektet genomförs i egen regi och någon totalentreprenör finns därför inte.','utifrån projektets genomförandeform')}
+  async function acceptContextException(item:MappingItem){if(!item.context_exception)return;return markNotApplicable(item,item.context_exception.reason,'utifrån projektkontexten')}
 
   function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
     if (!suggestions.length) return null;
@@ -150,17 +155,20 @@ export function GoverningMappingView({ projectId }: Props) {
         const exception = isException(item);
         const suggestions = data.suggestions[item.id] || [];
         const selfBuildException=deliveryMode==='self_build'&&isTotalContractorItem(item)&&!mapped&&!exception;
+        const contextException=Boolean(item.context_exception)&&!mapped&&!exception;
         const stateClass = exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
-        const kind=item.handling_kind||'work';
+        const kinds=(item.handling_kinds?.length?item.handling_kinds:[item.handling_kind||'work']).filter((v,i,a)=>a.indexOf(v)===i);
+        const primary=item.handling_kind||'work';
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
           <div className="mappingState" title={exception ? 'Hanterad som undantag' : mapped ? 'Kopplad till aktivitet' : 'Saknar aktivitet'}>{exception ? '—' : mapped ? '✓' : '!'}</div>
           <div className="mappingItemBody">
-            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind"><span>{HANDLING_ICONS[kind]}</span>{HANDLING_LABELS[kind]}</div><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
+            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind">{kinds.map(kind=><span key={kind} style={{marginRight:10}}>{HANDLING_ICONS[kind]} {HANDLING_LABELS[kind]}</span>)}</div><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3>{item.timing_label&&<small><b>⏱ {item.timing_label}</b></small>}{item.interpretation_note&&<small>{item.interpretation_note}</small>}</div>
             {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
               : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
+              : contextException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>{item.context_exception?.reason}</span><button disabled={busyItemId===item.id} onClick={()=>void acceptContextException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
-              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{kind==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':kind==='condition'?'Posten är ett projektvillkor och behöver kopplas till relevant kontroll/aktivitet eller hanteras som villkor.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
+              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{primary==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':primary==='condition'?'Posten är ett projektvillkor och behöver kopplas till relevant kontroll/aktivitet eller hanteras som villkor.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
           </div>
         </article>;
       })}
