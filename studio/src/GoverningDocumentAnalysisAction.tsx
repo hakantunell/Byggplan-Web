@@ -23,7 +23,7 @@ function environmentItems():AnalysisItem[]{
 }
 
 function technicalConsultationItems():AnalysisItem[]{
-  return VK4410_TECHNICAL_CONSULTATION.items.map(item=>({...item,handlingStatus:'unhandled'}));
+  return VK4410_TECHNICAL_CONSULTATION.items.map(item=>({...item,handlingStatus:'handlingStatus' in item?item.handlingStatus:'unhandled'}));
 }
 
 function compact(value:string){return value.toLocaleLowerCase('sv-SE').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
