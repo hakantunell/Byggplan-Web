@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 
 type MappingSummary = {
-  item_count: number; mapped_count: number; exception_count: number; covered_count: number;
+  item_count: number; mapped_count: number; exception_count: number; project_condition_count?:number; covered_count: number;
   uncovered_count: number; coverage_percent: number;
 };
 type MappingDocument = {
   id: string; document_type: string; title: string; issuer: string; reference: string;
-  item_count: number; mapped_count: number; exception_count: number; covered_count: number;
+  item_count: number; mapped_count: number; exception_count: number; project_condition_count?:number; covered_count: number;
   uncovered_count: number; coverage_percent: number;
 };
 type HandlingKind='work'|'control'|'administration'|'condition'|'operation'|'evidence'|'deadline';
@@ -15,7 +15,7 @@ type MappingItem = {
   id: string; governing_document_id: string; code: string; description: string; section_code: string;
   section_title: string; item_type: string; responsible_role: string; handling_status: string;
   handling_kind?: HandlingKind; handling_kinds?:HandlingKind[]; evidence_type?:string|null; timing_label?:string;
-  context_exception?:ContextException|null; interpretation_note?:string;
+  context_exception?:ContextException|null; interpretation_note?:string; project_condition?:boolean;
   source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
 };
 type MappingActivity = {
@@ -46,6 +46,7 @@ const DELIVERY_LABELS:Record<DeliveryMode,string>={self_build:'Egen regi',genera
 const HANDLING_LABELS:Record<HandlingKind,string>={work:'Arbete / åtgärd',control:'Kontroll',administration:'Administration / dokumentation',condition:'Projektvillkor',operation:'Drift / förvaltning',evidence:'Bevis i fält',deadline:'Tidsfrist / milstolpe'};
 const HANDLING_ICONS:Record<HandlingKind,string>={work:'🔨',control:'✓',administration:'🗂',condition:'◆',operation:'↻',evidence:'📷',deadline:'⏱'};
 const isException = (item: MappingItem) => Boolean(EXCEPTION_LABELS[item.handling_status]);
+const isProjectConditionHandled=(item:MappingItem)=>Boolean(item.project_condition&&item.handling_status==='handled');
 const isTotalContractorItem=(item:MappingItem)=>/totalentreprenör/i.test(item.description||'');
 
 function delay(ms:number){return new Promise<void>(resolve=>window.setTimeout(resolve,ms))}
@@ -65,7 +66,7 @@ export function GoverningMappingView({ projectId }: Props) {
   const [data, setData] = useState<MappingResponse | null>(null);
   const [deliveryMode,setDeliveryMode]=useState<DeliveryMode>('undecided');
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
-  const [filter, setFilter] = useState<'all'|'uncovered'|'mapped'|'exceptions'>('uncovered');
+  const [filter, setFilter] = useState<'all'|'uncovered'|'mapped'|'exceptions'|'conditions'>('uncovered');
   const [busyItemId, setBusyItemId] = useState('');
   const [message, setMessage] = useState('');
 
@@ -95,9 +96,11 @@ export function GoverningMappingView({ projectId }: Props) {
       if (selectedDocumentId && item.governing_document_id !== selectedDocumentId) return false;
       const mapped = Number(item.mapped_activity_count || 0) > 0;
       const exception = isException(item);
-      if (filter === 'uncovered') return !mapped && !exception;
-      if (filter === 'mapped') return mapped && !exception;
+      const condition=isProjectConditionHandled(item);
+      if (filter === 'uncovered') return !mapped && !exception && !condition;
+      if (filter === 'mapped') return mapped && !exception && !condition;
       if (filter === 'exceptions') return exception;
+      if (filter === 'conditions') return condition;
       return true;
     });
   }, [data, selectedDocumentId, filter]);
@@ -124,6 +127,10 @@ export function GoverningMappingView({ projectId }: Props) {
   }
   async function acceptSelfBuildException(item:MappingItem){return markNotApplicable(item,'Projektet genomförs i egen regi och någon totalentreprenör finns därför inte.','utifrån projektets genomförandeform')}
   async function acceptContextException(item:MappingItem){if(!item.context_exception)return;return markNotApplicable(item,item.context_exception.reason,'utifrån projektkontexten')}
+  async function markProjectCondition(item:MappingItem){
+    setBusyItemId(item.id);setMessage('');
+    try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'handled',handlingComment:'Hanteras som ett bestående projektvillkor och visas under Projektvillkor.'})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte hantera posten som projektvillkor.');setMessage(`${item.code||'Posten'} hanteras nu som projektvillkor.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera projektvillkoret.')}finally{setBusyItemId('')}
+  }
 
   function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
     if (!suggestions.length) return null;
@@ -138,7 +145,7 @@ export function GoverningMappingView({ projectId }: Props) {
 
   return <div className="mappingView">
     <header className="mappingHeader">
-      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p><div className="mappingProjectContext"><span>Projektkontext</span><strong>{DELIVERY_LABELS[deliveryMode]}</strong><small>Ändras i projektets konfiguration, inte i kartläggningen.</small></div></div>
+      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet, uttryckligen hanterad som undantag eller registrerad som ett rent projektvillkor.</p><div className="mappingProjectContext"><span>Projektkontext</span><strong>{DELIVERY_LABELS[deliveryMode]}</strong><small>Ändras i projektets konfiguration, inte i kartläggningen.</small></div></div>
       <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span></div>
     </header>
 
@@ -148,7 +155,7 @@ export function GoverningMappingView({ projectId }: Props) {
       {data.documents.map(document => <button key={document.id} className={selectedDocumentId === document.id ? 'active' : ''} onClick={() => setSelectedDocumentId(document.id)}>
         <div><small>{DOCUMENT_LABELS[document.document_type] || 'Dokument'}</small><strong>{document.title}</strong></div>
         <span className={document.coverage_percent === 100 ? 'coverageOk' : 'coverageWarn'}>{document.coverage_percent}%</span>
-        <small>{document.mapped_count} kopplade · {document.exception_count} undantag · {document.uncovered_count} saknas</small>
+        <small>{document.mapped_count} kopplade · {document.project_condition_count||0} villkor · {document.exception_count} undantag · {document.uncovered_count} saknas</small>
       </button>)}
     </div>
 
@@ -157,6 +164,7 @@ export function GoverningMappingView({ projectId }: Props) {
       <div className="mappingFilters">
         <button className={filter === 'uncovered' ? 'active' : ''} onClick={() => setFilter('uncovered')}>⚠ Saknar koppling</button>
         <button className={filter === 'mapped' ? 'active' : ''} onClick={() => setFilter('mapped')}>✓ Kopplade</button>
+        <button className={filter === 'conditions' ? 'active' : ''} onClick={() => setFilter('conditions')}>◆ Projektvillkor</button>
         <button className={filter === 'exceptions' ? 'active' : ''} onClick={() => setFilter('exceptions')}>— Undantag</button>
         <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Alla</button>
       </div>
@@ -166,22 +174,26 @@ export function GoverningMappingView({ projectId }: Props) {
       {visibleItems.map(item => {
         const mapped = Number(item.mapped_activity_count || 0) > 0;
         const exception = isException(item);
+        const handledCondition=isProjectConditionHandled(item);
         const suggestions = data.suggestions[item.id] || [];
-        const selfBuildException=deliveryMode==='self_build'&&isTotalContractorItem(item)&&!mapped&&!exception;
-        const contextException=Boolean(item.context_exception)&&!mapped&&!exception;
-        const stateClass = exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
+        const selfBuildException=deliveryMode==='self_build'&&isTotalContractorItem(item)&&!mapped&&!exception&&!handledCondition;
+        const contextException=Boolean(item.context_exception)&&!mapped&&!exception&&!handledCondition;
+        const stateClass = handledCondition ? 'mapped' : exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
         const kinds=(item.handling_kinds?.length?item.handling_kinds:[item.handling_kind||'work']).filter((v,i,a)=>a.indexOf(v)===i);
         const primary=item.handling_kind||'work';
+        const stateTitle=handledCondition?'Hanteras som projektvillkor':exception?'Hanterad som undantag':mapped?'Kopplad till aktivitet':'Saknar aktivitet';
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
-          <div className="mappingState" title={exception ? 'Hanterad som undantag' : mapped ? 'Kopplad till aktivitet' : 'Saknar aktivitet'}>{exception ? '—' : mapped ? '✓' : '!'}</div>
+          <div className="mappingState" title={stateTitle}>{handledCondition?'◆':exception?'—':mapped?'✓':'!'}</div>
           <div className="mappingItemBody">
             <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind">{kinds.map(kind=><span key={kind} style={{marginRight:10}}>{HANDLING_ICONS[kind]} {HANDLING_LABELS[kind]}</span>)}</div><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3>{item.timing_label&&<small><b>⏱ {item.timing_label}</b></small>}{item.interpretation_note&&<small>{item.interpretation_note}</small>}</div>
-            {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
+            {handledCondition ? <div className="mappedActivities"><b>Projektvillkor</b><span>Registrerat som ett bestående villkor för projektet. Ingen separat aktivitet krävs enbart för att bära villkoret.</span></div>
+              : exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
+              : item.project_condition ? <div className="mappingNoSuggestion"><b>Rent projektvillkor</b><span>Villkoret ska finnas kvar som styrande information för projektet men behöver inget eget arbetskort.</span><button disabled={busyItemId===item.id} onClick={()=>void markProjectCondition(item)}>Hantera som projektvillkor</button></div>
               : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
               : contextException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>{item.context_exception?.reason}</span><button disabled={busyItemId===item.id} onClick={()=>void acceptContextException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
-              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{primary==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':primary==='condition'?'Posten är ett projektvillkor och behöver kopplas till relevant kontroll/aktivitet eller hanteras som villkor.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
+              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{primary==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':primary==='condition'?'Posten innehåller ett villkor som också kan behöva kopplas till relevant kontroll eller aktivitet.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
           </div>
         </article>;
       })}
