@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom';
 import {VK4410_CONTROL_PLAN} from './controlPlanVk4410';
 import {VK4410_PROJECT_CONTROL_PLAN} from './controlPlanProjectProposalVk4410';
 import {VK4410_ENVIRONMENT_DECISION} from './governingDocumentEnvironmentVk4410';
+import {VK4410_TECHNICAL_CONSULTATION} from './governingDocumentTechnicalConsultationVk4410';
 
 type DocumentSummary={id:string;document_type:string;title:string;reference:string;source_filename:string;item_count:number};
 type Props={projectId:string;onOpenMapping:()=>void};
@@ -24,17 +25,23 @@ function environmentItems():AnalysisItem[]{
   }));
 }
 
+function technicalConsultationItems():AnalysisItem[]{
+  return VK4410_TECHNICAL_CONSULTATION.items.map(item=>({...item,handlingStatus:'unhandled'}));
+}
+
 function compact(value:string){return value.toLocaleLowerCase('sv-SE').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
 
 function analysisFor(document:DocumentSummary):AnalysisItem[]|null{
   const source=compact(document.source_filename||'');
   const title=compact(document.title||'');
+  const reference=compact(document.reference||'');
   if(document.document_type==='control_plan'){
     if(source.includes('kontrollplankavk4410')||source.includes('tekniskaegenskapskrav')||source.includes('teknegenskapskrav'))return reviewedPlanItems(VK4410_CONTROL_PLAN.points);
     if(source.includes('kontrollplanvemdalenskyrkby4410fritidshus')||title.includes('kontrollplandelfritidshus'))return reviewedPlanItems(VK4410_PROJECT_CONTROL_PLAN.points);
     return null;
   }
-  if(document.document_type==='authority_decision'&&(source.includes('avlopp')||source.includes('infiltration')||compact(document.reference||'').includes('m2026617')||title.includes('avlopp')))return environmentItems();
+  if(document.document_type==='authority_decision'&&(source.includes('avlopp')||source.includes('infiltration')||reference.includes('m2026617')||title.includes('avlopp')))return environmentItems();
+  if(document.document_type==='technical_consultation'||source.includes('protokollteknisktsamrad')||title.includes('teknisktsamrad'))return technicalConsultationItems();
   return null;
 }
 
