@@ -1,14 +1,18 @@
 let installed=false;
 
-const LEGACY_ADMIN=/^(registrera bas-|genomför startmöte|beställ och genomför (ka-besök|byggnadsnämndens arbetsplatsbesök|slutsamråd|lägeskontroll)|samla (ifylld och signerad kontrollplan|egenkontroller och intyg|myndighetsintyg)|upprätta eller samla brandskyddsbeskrivning|upprätta eller samla slutlig brandskyddsdokumentation|spara intyg eller protokoll från sotarbesiktning|verifiera behörighet eller dokumentera vald våtrumsmetod)/i;
+const LEGACY_ADMIN=/^(registrera bas-|genomför startmöte|beställ och genomför (ka-besök|byggnadsnämndens arbetsplatsbesök|slutsamråd|lägeskontroll)|samla (ifylld och signerad kontrollplan|egenkontroller och intyg|myndighetsintyg)|upprätta eller samla brandskyddsbeskrivning|upprätta eller samla slutlig brandskyddsdokumentation|spara intyg eller protokoll från sotarbesiktning|verifiera behörighet eller dokumentera vald våtrumsmetod|kontrollera att arbetsmiljöorganisation och arbetsmiljöplan är ordnade|kontrollera att aktuella projekthandlingar finns tillgängliga|säkerställ att startbesked har erhållits före byggstart|hantera avvikelser från bygglov och upprätta relationshandling vid behov|kontrollera att fuktsäkerhetsprojektering har beaktats i projekteringen|säkerställ att erforderlig geoteknisk utredning finns|kontrollera radonförutsättningar och eventuell radonklass|kontrollera geotekniskt underlag och markförhållanden)/i;
 
 type MobileActivity={id?:string;type?:string;title?:string};
 type MobileTask={activities?:MobileActivity[]};
 type ExecutionItem={activity_id?:string;context?:'field'|'administrative'};
 
+function isLegacyAdministrative(activity:MobileActivity){
+  return activity.type==='administration'||LEGACY_ADMIN.test(activity.title||'');
+}
+
 function legacyFilter(tasks:MobileTask[]){
   return tasks
-    .map(task=>({...task,activities:(task.activities||[]).filter(activity=>activity.type!=='administration'&&!LEGACY_ADMIN.test(activity.title||''))}))
+    .map(task=>({...task,activities:(task.activities||[]).filter(activity=>!isLegacyAdministrative(activity))}))
     .filter(task=>(task.activities||[]).length>0);
 }
 
@@ -43,7 +47,7 @@ export function installMobileActivityScope(){
           if(Array.isArray(contextData.items)&&contextData.items.length>0){
             const fieldIds=new Set(contextData.items.filter(item=>item.context==='field').map(item=>String(item.activity_id||'')).filter(Boolean));
             const tasks=data.tasks
-              .map(task=>({...task,activities:(task.activities||[]).filter(activity=>Boolean(activity.id)&&fieldIds.has(String(activity.id)))}))
+              .map(task=>({...task,activities:(task.activities||[]).filter(activity=>Boolean(activity.id)&&fieldIds.has(String(activity.id))&&!isLegacyAdministrative(activity))}))
               .filter(task=>(task.activities||[]).length>0);
             return jsonResponse(response,{...data,tasks});
           }
