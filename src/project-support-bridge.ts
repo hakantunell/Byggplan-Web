@@ -157,10 +157,9 @@ export function installProjectSupportBridge() {
             activity.executorLabel=execution.executor_label||null;
             activity.governingDocuments=execution.governing_documents||[];
 
-            if(activity.governingDocuments.length>0){
-              const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
-              activity.title=`${responsibilityIcon} 📋 ${activity.title}`;
-            }
+            const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
+            const governingIcon=activity.governingDocuments.length>0?' 📋':'';
+            activity.title=`${responsibilityIcon}${governingIcon} ${activity.title}`;
           }
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
         }
