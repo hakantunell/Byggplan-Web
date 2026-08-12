@@ -31,10 +31,15 @@ type GoverningDocumentLink = {
   documentType:string;
   documentTitle:string;
   issuer?:string;
+  reference?:string;
   itemId:string;
   code:string;
   label:string;
+  sectionCode?:string;
+  sectionTitle?:string;
+  itemType?:string;
   responsibleRole?:string;
+  evidenceRequired?:string;
 };
 
 type FieldActivity = {
@@ -82,6 +87,25 @@ function supportItem(resource: SupportResource, apiOrigin: string): SupportItem 
       ...file,
       url: new URL(file.url, apiOrigin).toString()
     }))
+  };
+}
+
+function governingSupportItem(link:GoverningDocumentLink):SupportItem{
+  const point=[link.sectionCode,link.sectionTitle,link.code].filter(Boolean).join(' · ');
+  const details:string[]=[];
+  details.push(`Styrdokument: ${link.documentTitle}`);
+  if(link.issuer)details.push(`Utfärdare: ${link.issuer}`);
+  if(link.reference)details.push(`Referens: ${link.reference}`);
+  if(point)details.push(`Punkt: ${point}`);
+  if(link.itemType)details.push(`Typ av krav: ${link.itemType}`);
+  if(link.responsibleRole)details.push(`Ansvarig enligt dokumentet: ${link.responsibleRole}`);
+  if(link.evidenceRequired)details.push(`Dokumentation/verifiering: ${link.evidenceRequired}`);
+  return {
+    id:`governing:${link.itemId}`,
+    title:`📋 ${link.documentTitle}${link.code?` · ${link.code}`:''}`,
+    type:'text',
+    summary:link.label||'',
+    details
   };
 }
 
@@ -161,6 +185,9 @@ export function installProjectSupportBridge() {
             activity.executorType=execution.executor_type||'self';
             activity.executorLabel=execution.executor_label||null;
             activity.governingDocuments=execution.governing_documents||[];
+            if(activity.governingDocuments.length){
+              activity.detailSupport=[...(activity.detailSupport||[]),...activity.governingDocuments.map(governingSupportItem)];
+            }
             ensureResponsibilityPrefix(activity,activity.executorType==='third_party'?'👥':'👤',activity.governingDocuments.length>0);
           }
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
