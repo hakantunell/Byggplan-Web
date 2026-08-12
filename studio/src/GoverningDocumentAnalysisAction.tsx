@@ -19,10 +19,7 @@ function reviewedPlanItems(points:readonly any[]):AnalysisItem[]{
 }
 
 function environmentItems():AnalysisItem[]{
-  return VK4410_ENVIRONMENT_DECISION.items.map(item=>({
-    ...item,
-    responsibleRole:item.itemType==='information'?'':item.itemType==='administration'?'BH':item.code==='V-02'?'Fackkunnig/entreprenör':'EK'
-  }));
+  return VK4410_ENVIRONMENT_DECISION.items.map(item=>({...item,responsibleRole:item.responsibleRole||''}));
 }
 
 function technicalConsultationItems():AnalysisItem[]{
