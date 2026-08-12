@@ -85,7 +85,7 @@ function supportItem(resource: SupportResource, apiOrigin: string): SupportItem 
   };
 }
 
-async function fetchWithTimeout(baseFetch:typeof window.fetch,input:RequestInfo|URL,init:RequestInit,timeoutMs=1800){
+async function fetchWithTimeout(baseFetch:typeof window.fetch,input:RequestInfo|URL,init:RequestInit,timeoutMs=6000){
   const controller=new AbortController();
   const timer=window.setTimeout(()=>controller.abort(),timeoutMs);
   try{return await baseFetch(input,{...init,signal:controller.signal})}finally{window.clearTimeout(timer)}
@@ -116,8 +116,8 @@ export function installProjectSupportBridge() {
       if (!Array.isArray(data.tasks)) return response;
 
       const [supportResult,contextResult] = await Promise.allSettled([
-        fetchWithTimeout(baseFetch,`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' }),
-        fetchWithTimeout(baseFetch,`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' })
+        fetchWithTimeout(baseFetch,`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' },3000),
+        fetchWithTimeout(baseFetch,`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' },6000)
       ]);
 
       const supportResponse=supportResult.status==='fulfilled'?supportResult.value:null;
@@ -182,6 +182,8 @@ export function installProjectSupportBridge() {
           task.workSection=appendGoverningCount(task.workSection,governedBySection.get(task.workSectionId)||0);
           task.workArea=appendGoverningCount(task.workArea,governedByArea.get(task.workAreaId)||0);
         }
+      } else {
+        console.warn('Kunde inte läsa exekveringskontext/styrdokumentskopplingar för mobilvyn.',contextResponse?.status);
       }
 
       const headers = new Headers(response.headers);
