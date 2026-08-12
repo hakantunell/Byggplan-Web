@@ -9,7 +9,7 @@ type TreeResponse={masterProject:MasterProjectSummary;areas:Area[];sections:Sect
 type MasterModule={id:string;group_code:string;group_name:string;selection_mode:'single'|'multi';code:string;name:string;description:string;sort_order:number};
 type Props={onProjectCreated?:(projectId:string)=>void};
 const API_BASE='';
-const LATEST_V2_VERSION=11;
+const LATEST_V2_VERSION=13;
 const ACTIVITY_LABELS:Record<string,string>={perform:'Utför',document:'Dokumentera',measurement:'Mät',check:'Kontrollera',approval:'Godkänn',administration:'Administration',note:'Kom ihåg',choice:'Välj'};
 const ACTIVITY_ICONS:Record<string,string>={perform:'●',document:'📷',measurement:'📏',check:'✓',approval:'✍',administration:'🗂',note:'📝',choice:'◉'};
 
