@@ -48,6 +48,19 @@ const HANDLING_ICONS:Record<HandlingKind,string>={work:'🔨',control:'✓',admi
 const isException = (item: MappingItem) => Boolean(EXCEPTION_LABELS[item.handling_status]);
 const isTotalContractorItem=(item:MappingItem)=>/totalentreprenör/i.test(item.description||'');
 
+function delay(ms:number){return new Promise<void>(resolve=>window.setTimeout(resolve,ms))}
+async function fetchWithTransientRetry(input:RequestInfo|URL,init?:RequestInit){
+  let lastError:unknown;
+  for(let attempt=0;attempt<3;attempt+=1){
+    try{
+      const response=await fetch(input,init);
+      if(response.status<500||attempt===2)return response;
+    }catch(error){lastError=error;if(attempt===2)throw error}
+    await delay(250*(attempt+1));
+  }
+  throw lastError instanceof Error?lastError:new Error('Tillfälligt fel vid hämtning.');
+}
+
 export function GoverningMappingView({ projectId }: Props) {
   const [data, setData] = useState<MappingResponse | null>(null);
   const [deliveryMode,setDeliveryMode]=useState<DeliveryMode>('undecided');
@@ -62,7 +75,7 @@ export function GoverningMappingView({ projectId }: Props) {
     if (!projectId) return;
     try {
       const [response,contextResponse]=await Promise.all([
-        fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-mapping`, { cache: 'no-store' }),
+        fetchWithTransientRetry(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-mapping`, { cache: 'no-store' }),
         fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/context`,{cache:'no-store'})
       ]);
       const next = await response.json().catch(() => ({})) as MappingResponse;
