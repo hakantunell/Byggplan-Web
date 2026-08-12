@@ -6,8 +6,12 @@ type MobileActivity={id?:string;type?:string;title?:string};
 type MobileTask={activities?:MobileActivity[]};
 type ExecutionItem={activity_id?:string;context?:'field'|'administrative'};
 
+function undecoratedTitle(value:string){
+  return value.replace(/^[^A-Za-zÅÄÖåäö0-9]+/u,'').trim();
+}
+
 function isLegacyAdministrative(activity:MobileActivity){
-  return activity.type==='administration'||LEGACY_ADMIN.test(activity.title||'');
+  return activity.type==='administration'||LEGACY_ADMIN.test(undecoratedTitle(activity.title||''));
 }
 
 function legacyFilter(tasks:MobileTask[]){
