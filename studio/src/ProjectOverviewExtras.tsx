@@ -2,6 +2,7 @@ import { useEffect,useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ProjectDocumentsEditor } from './ProjectDocumentsEditor';
 import { ProjectAdministrationEditor } from './ProjectAdministrationEditor';
+import { ProjectConditionsView } from './ProjectConditionsView';
 import { ProjectDeleteControl } from './ProjectDeleteControl';
 
 type MasterDiagnostics={
@@ -35,5 +36,5 @@ export function ProjectOverviewExtras(){
     sync();const timer=window.setInterval(sync,250);return()=>window.clearInterval(timer);
   },[]);
   if(!target||!projectId)return null;
-  return createPortal(<div className="projectOverviewExtras"><MasterSnapshotInfo projectId={projectId}/><ProjectAdministrationEditor projectId={projectId}/><ProjectDocumentsEditor projectId={projectId}/><ProjectDeleteControl projectId={projectId} projectName={projectName||'Projekt'}/></div>,target);
+  return createPortal(<div className="projectOverviewExtras"><MasterSnapshotInfo projectId={projectId}/><ProjectAdministrationEditor projectId={projectId}/><ProjectConditionsView projectId={projectId}/><ProjectDocumentsEditor projectId={projectId}/><ProjectDeleteControl projectId={projectId} projectName={projectName||'Projekt'}/></div>,target);
 }
