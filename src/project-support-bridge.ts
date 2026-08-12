@@ -122,7 +122,7 @@ export function installProjectSupportBridge() {
 
       const [supportResult,contextResult] = await Promise.allSettled([
         fetchWithTimeout(baseFetch,`${url.origin}/api/project-support?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' },3000),
-        fetchWithTimeout(baseFetch,`${url.origin}/api/project-execution-contexts?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' },6000)
+        fetchWithTimeout(baseFetch,`${url.origin}/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`, { cache:'no-store' },6000)
       ]);
 
       const supportResponse=supportResult.status==='fulfilled'?supportResult.value:null;
@@ -192,7 +192,7 @@ export function installProjectSupportBridge() {
             ensureResponsibilityPrefix(activity,'👤');
           }
         }
-        console.warn('Kunde inte läsa exekveringskontext/styrdokumentskopplingar för mobilvyn.',contextResponse?.status);
+        console.warn('Kunde inte läsa fältmetadata/styrdokumentskopplingar för mobilvyn.',contextResponse?.status);
       }
 
       const headers = new Headers(response.headers);
