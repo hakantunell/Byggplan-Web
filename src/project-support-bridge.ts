@@ -95,6 +95,11 @@ function appendGoverningCount(label:string,count:number){
   return count>0?`${label}  📋 ${count}`:label;
 }
 
+function ensureResponsibilityPrefix(activity:FieldActivity,icon:'👤'|'👥',governed=false){
+  const clean=activity.title.replace(/^(?:👤|👥)(?:\s*📋)?\s*/u,'');
+  activity.title=`${icon}${governed?' 📋':''} ${clean}`;
+}
+
 export function installProjectSupportBridge() {
   const baseFetch = window.fetch.bind(window);
 
@@ -156,10 +161,7 @@ export function installProjectSupportBridge() {
             activity.executorType=execution.executor_type||'self';
             activity.executorLabel=execution.executor_label||null;
             activity.governingDocuments=execution.governing_documents||[];
-
-            const responsibilityIcon=activity.executorType==='third_party'?'👥':'👤';
-            const governingIcon=activity.governingDocuments.length>0?' 📋':'';
-            activity.title=`${responsibilityIcon}${governingIcon} ${activity.title}`;
+            ensureResponsibilityPrefix(activity,activity.executorType==='third_party'?'👥':'👤',activity.governingDocuments.length>0);
           }
           task.activities=task.activities.filter(activity=>!administrative.has(activity.id));
         }
@@ -182,6 +184,14 @@ export function installProjectSupportBridge() {
           task.workArea=appendGoverningCount(task.workArea,governedByArea.get(task.workAreaId)||0);
         }
       } else {
+        for(const task of data.tasks){
+          for(const activity of task.activities){
+            activity.executorType='self';
+            activity.executorLabel=null;
+            activity.governingDocuments=[];
+            ensureResponsibilityPrefix(activity,'👤');
+          }
+        }
         console.warn('Kunde inte läsa exekveringskontext/styrdokumentskopplingar för mobilvyn.',contextResponse?.status);
       }
 
