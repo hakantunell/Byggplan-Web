@@ -10,15 +10,18 @@ const FIELDS:Record<string,FieldDef[]>={
   ],
   arbetsmiljoplan:[
     {key:'date',label:'Upprättad datum',type:'date'},
-    {key:'responsible',label:'Ansvarig / upprättad av',placeholder:'Namn eller organisation'}
+    {key:'responsible',label:'Ansvarig / upprättad av',placeholder:'Namn eller organisation'},
+    {key:'posted_date',label:'Anslagen / tillgänglig på arbetsplatsen från',type:'date'}
   ],
   bas_p:[
     {key:'name',label:'BAS-P',placeholder:'Namn'},
-    {key:'organization',label:'Organisation / företag',placeholder:'Valfritt'}
+    {key:'organization',label:'Organisation / företag',placeholder:'Valfritt'},
+    {key:'competence',label:'Kompetens / erfarenhet',placeholder:'Kort underlag för teoretiska och praktiska kunskaper'}
   ],
   bas_u:[
     {key:'name',label:'BAS-U',placeholder:'Namn'},
-    {key:'organization',label:'Organisation / företag',placeholder:'Valfritt'}
+    {key:'organization',label:'Organisation / företag',placeholder:'Valfritt'},
+    {key:'competence',label:'Kompetens / erfarenhet',placeholder:'Kort underlag för teoretiska och praktiska kunskaper'}
   ]
 };
 
