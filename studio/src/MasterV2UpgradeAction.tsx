@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {createPortal} from 'react-dom';
 type Master={id:string;code:string;name:string;version:number};
-const TARGET_VERSION=7;
+const TARGET_VERSION=8;
 export function MasterV2UpgradeAction(){const[target,setTarget]=useState<Element|null>(null);const[masters,setMasters]=useState<Master[]>([]);const[selectedName,setSelectedName]=useState('');const[busy,setBusy]=useState(false);const[message,setMessage]=useState('');
  useEffect(()=>{void load()},[]);useEffect(()=>{const sync=()=>{const header=document.querySelector('.masterProjectHeader');setTarget(header?.querySelector('.masterProjectHeaderRight')||null);setSelectedName(header?.querySelector('h1')?.textContent?.trim()||'')};sync();const timer=window.setInterval(sync,300);return()=>window.clearInterval(timer)},[]);
  async function load(){try{const r=await fetch('/api/studio/master-projects',{cache:'no-store'});const d=await r.json().catch(()=>({})) as {masterProjects?:Master[]};if(r.ok)setMasters(d.masterProjects||[])}catch{}}
