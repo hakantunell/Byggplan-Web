@@ -4,6 +4,7 @@ import { App } from './App';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { DemoProfileSwitcher, installDemoFetchIdentity } from './DemoProfileSwitcher';
 import { installProjectSupportBridge } from './project-support-bridge';
+import { installMobileActivityScope } from './mobile-activity-scope';
 import { ProjectDocumentsBar } from './ProjectDocumentsBar';
 import './styles.css';
 import './responsive.css';
@@ -17,6 +18,7 @@ import './project-documents-bar.css';
 
 installDemoFetchIdentity();
 installProjectSupportBridge();
+installMobileActivityScope();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
