@@ -9,10 +9,11 @@ type MappingDocument = {
   item_count: number; mapped_count: number; exception_count: number; covered_count: number;
   uncovered_count: number; coverage_percent: number;
 };
+type HandlingKind='work'|'control'|'administration'|'condition'|'operation';
 type MappingItem = {
   id: string; governing_document_id: string; code: string; description: string; section_code: string;
   section_title: string; item_type: string; responsible_role: string; handling_status: string;
-  source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
+  handling_kind?: HandlingKind; source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
 };
 type MappingActivity = {
   id: string; title: string; description: string; activity_type: string; task_title: string;
@@ -20,6 +21,7 @@ type MappingActivity = {
 };
 type Suggestion = {
   activity_id: string; title: string; task_title: string; section_name: string; area_name: string; confidence: number;
+  lifecycle_stage?:string; surface?:string; applicability?:string; condition_text?:string;
 };
 type MappingResponse = {
   runtime?: string;
@@ -38,6 +40,8 @@ const EXCEPTION_LABELS: Record<string,string> = {
   not_applicable: 'Ej tillämplig (N/A)', cannot_verify: 'Kan inte verifieras', alternative_evidence: 'Ersatt av annat underlag'
 };
 const DELIVERY_LABELS:Record<DeliveryMode,string>={self_build:'Egen regi',general_contractor:'General-/totalentreprenad',split_contract:'Delad entreprenad',undecided:'Inte bestämt'};
+const HANDLING_LABELS:Record<HandlingKind,string>={work:'Arbete',control:'Kontroll',administration:'Administration / dokumentation',condition:'Projektvillkor',operation:'Drift / förvaltning'};
+const HANDLING_ICONS:Record<HandlingKind,string>={work:'●',control:'✓',administration:'🗂',condition:'◆',operation:'↻'};
 const isException = (item: MappingItem) => Boolean(EXCEPTION_LABELS[item.handling_status]);
 const isTotalContractorItem=(item:MappingItem)=>/totalentreprenör/i.test(item.description||'');
 
@@ -67,11 +71,6 @@ export function GoverningMappingView({ projectId }: Props) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Kunde inte läsa kartläggningen.');
     }
-  }
-
-  async function changeDeliveryMode(mode:DeliveryMode){
-    setDeliveryMode(mode);setMessage('');
-    try{const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/context`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({deliveryMode:mode})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte spara genomförandeformen.');setMessage(`Genomförandeform: ${DELIVERY_LABELS[mode]}.`)}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte spara genomförandeformen.')}
   }
 
   const visibleItems = useMemo(() => {
@@ -111,7 +110,7 @@ export function GoverningMappingView({ projectId }: Props) {
   function renderSuggestions(item: MappingItem, suggestions: Suggestion[], additional = false) {
     if (!suggestions.length) return null;
     return <div className="mappingSuggestions"><b>{additional ? 'Ytterligare möjliga kopplingar' : 'Föreslagna matchningar'}</b>{suggestions.map(suggestion => <div className="mappingSuggestion" key={suggestion.activity_id}>
-      <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small></div>
+      <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small>{suggestion.condition_text&&<small>Villkor: {suggestion.condition_text}</small>}</div>
       <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id} onClick={() => void acceptSuggestion(item,suggestion)}>{additional ? 'Lägg till' : 'Koppla'}</button>
     </div>)}</div>;
   }
@@ -121,7 +120,7 @@ export function GoverningMappingView({ projectId }: Props) {
 
   return <div className="mappingView">
     <header className="mappingHeader">
-      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p><label style={{display:'inline-flex',gap:8,alignItems:'center'}}><span>Genomförandeform</span><select value={deliveryMode} onChange={e=>void changeDeliveryMode(e.target.value as DeliveryMode)}><option value="undecided">Inte bestämt</option><option value="self_build">Egen regi</option><option value="general_contractor">General-/totalentreprenad</option><option value="split_contract">Delad entreprenad</option></select></label></div>
+      <div><small>KARTLÄGGNING{data.runtime ? ` · ${data.runtime}` : ''}</small><h1>Projektets täckning</h1><p>En styrande post är täckt när den är kopplad till minst en aktivitet eller uttryckligen hanterad som undantag.</p><div className="mappingProjectContext"><span>Projektkontext</span><strong>{DELIVERY_LABELS[deliveryMode]}</strong><small>Ändras i projektets konfiguration, inte i kartläggningen.</small></div></div>
       <div className="mappingTotal"><strong>{data.summary.coverage_percent}%</strong><span>{data.summary.covered_count} av {data.summary.item_count} poster omhändertagna</span></div>
     </header>
 
@@ -152,15 +151,16 @@ export function GoverningMappingView({ projectId }: Props) {
         const suggestions = data.suggestions[item.id] || [];
         const selfBuildException=deliveryMode==='self_build'&&isTotalContractorItem(item)&&!mapped&&!exception;
         const stateClass = exception ? 'exception' : mapped ? 'mapped' : 'unmapped';
+        const kind=item.handling_kind||'work';
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
           <div className="mappingState" title={exception ? 'Hanterad som undantag' : mapped ? 'Kopplad till aktivitet' : 'Saknar aktivitet'}>{exception ? '—' : mapped ? '✓' : '!'}</div>
           <div className="mappingItemBody">
-            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
+            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind"><span>{HANDLING_ICONS[kind]}</span>{HANDLING_LABELS[kind]}</div><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3></div>
             {exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
               : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
-              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.</span></div>}
+              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{kind==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':kind==='condition'?'Posten är ett projektvillkor och behöver kopplas till relevant kontroll/aktivitet eller hanteras som villkor.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
           </div>
         </article>;
       })}
