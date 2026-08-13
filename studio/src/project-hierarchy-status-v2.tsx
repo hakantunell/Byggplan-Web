@@ -1,13 +1,16 @@
 import { useEffect } from 'react';
 
+type MetaItem={activity_id:string;applicability?:string};
+
 export function ProjectHierarchyStatusV2() {
   useEffect(() => {
     let timer = 0;
     let stopped = false;
     let refreshGeneration = 0;
 
-    function taskComplete(task: any) {
-      return Boolean(task?.activities?.length) && task.activities.every((activity: any) => activity.done);
+    function taskComplete(task: any, deprecated: Set<string>) {
+      const active = (task?.activities || []).filter((activity: any) => !deprecated.has(activity.id));
+      return active.length > 0 && active.every((activity: any) => activity.done);
     }
 
     function schedule(delay = 1400) {
@@ -26,13 +29,21 @@ export function ProjectHierarchyStatusV2() {
       }
       try {
         const cacheBust = Date.now().toString(36);
-        const response = await fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
-        });
+        const [taskResponse, metadataResponse] = await Promise.all([
+          fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          }),
+          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          })
+        ]);
         if (stopped || generation !== refreshGeneration) return;
-        const data = response.ok ? await response.json() : { tasks: [] };
+        const data = taskResponse.ok ? await taskResponse.json() : { tasks: [] };
+        const metadataData = metadataResponse.ok ? await metadataResponse.json() : { items: [] };
         const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+        const deprecated = new Set<string>((metadataData.items || []).filter((item: MetaItem) => item.applicability === 'deprecated').map((item: MetaItem) => item.activity_id));
 
         let area = '';
         let section = '';
@@ -45,7 +56,7 @@ export function ProjectHierarchyStatusV2() {
           if (depth === 3) taskTitle = label;
           if (depth !== 3) continue;
           const task = tasks.find((item: any) => item.workArea === area && item.workSection === section && item.title === taskTitle);
-          const complete = taskComplete(task);
+          const complete = taskComplete(task, deprecated);
           const icon = Array.from(row.children).find(child => child instanceof HTMLElement && child.tagName === 'SPAN' && !child.classList.contains('projectTreeLabel') && !child.classList.contains('navSpacer') && !child.classList.contains('hierGov')) as HTMLElement | undefined;
           if (icon) {
             icon.textContent = complete ? '✓' : '▣';
@@ -62,7 +73,7 @@ export function ProjectHierarchyStatusV2() {
           for (const row of Array.from(document.querySelectorAll('.projectPage .nodeChildren article')) as HTMLElement[]) {
             const label = (row.querySelector('b')?.textContent || '').trim();
             const task = tasks.find((item: any) => item.workArea === selectedArea && item.workSection === selectedSection && item.title === label);
-            const complete = taskComplete(task);
+            const complete = taskComplete(task, deprecated);
             const icon = row.firstElementChild as HTMLElement | null;
             if (icon) {
               icon.textContent = complete ? '✓' : '▣';
@@ -78,8 +89,6 @@ export function ProjectHierarchyStatusV2() {
     function statusClick(event: Event) {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('.activityDone, .activityQuickStatus button')) return;
-      // The activity PUT is asynchronous. Refresh once quickly and once after
-      // the write/load cycle has had time to complete.
       window.setTimeout(() => void refresh(), 180);
       window.setTimeout(() => void refresh(), 650);
     }
