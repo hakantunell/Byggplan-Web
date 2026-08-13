@@ -4,7 +4,6 @@ import './same-origin-api';
 import './mapping-dialog-clarity';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { StudioShell } from './StudioShell';
-import { ProjectOverviewExtras } from './ProjectOverviewExtras';
 import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import './styles.css';
 import './palette.css';
@@ -23,16 +22,10 @@ import './project-documents.css';
 import './project-administration.css';
 import './project-detail-tabs.css';
 import './project-activities.css';
+import './project-workspace-v2.css';
 import './api-browser.css';
 import './governing-import-action.css';
 import './governing-analysis-action.css';
 
 installExecutionContextBridge();
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <StudioShell />
-    <ProjectOverviewExtras />
-    <MasterV2UpgradeAction />
-  </React.StrictMode>
-);
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><StudioShell/><MasterV2UpgradeAction/></React.StrictMode>);
