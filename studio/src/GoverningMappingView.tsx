@@ -11,12 +11,18 @@ type MappingDocument = {
 };
 type HandlingKind='work'|'control'|'administration'|'condition'|'operation'|'evidence'|'deadline';
 type ContextException={status:string;reason:string};
+type CreationSuggestion={
+  mode:'existing_task'|'new_task'|'new_section'|'new_area';
+  title:string;activityType:string;confidence:number;
+  areaId?:string;areaName:string;sectionId?:string;sectionName:string;taskId?:string;taskTitle:string;
+};
 type MappingItem = {
   id: string; governing_document_id: string; code: string; description: string; section_code: string;
   section_title: string; item_type: string; responsible_role: string; handling_status: string;
   handling_kind?: HandlingKind; handling_kinds?:HandlingKind[]; evidence_type?:string|null; timing_label?:string;
   context_exception?:ContextException|null; interpretation_note?:string; project_condition?:boolean;
   source_note: string; mapped_activity_count: number; mapped_activity_titles?: string | null;
+  creation_suggestion?:CreationSuggestion;
 };
 type MappingActivity = {
   id: string; title: string; description: string; activity_type: string; task_title: string;
@@ -130,6 +136,20 @@ export function GoverningMappingView({ projectId }: Props) {
     } finally { setBusyItemId(''); }
   }
 
+  async function createProjectActivity(item:MappingItem){
+    if(!item.creation_suggestion)return;
+    setBusyItemId(item.id);setMessage('');
+    try{
+      const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-items/${encodeURIComponent(item.id)}/create-project-activity`,{method:'POST'});
+      const result=await response.json().catch(()=>({})) as {error?:string;created?:{title?:string}};
+      if(!response.ok)throw new Error(result.error||'Kunde inte skapa den projektspecifika aktiviteten.');
+      setMessage(`Skapade och kopplade ${result.created?.title||item.creation_suggestion.title}.`);
+      await load();
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Kunde inte skapa den projektspecifika aktiviteten.');
+    }finally{setBusyItemId('')}
+  }
+
   async function markNotApplicable(item:MappingItem,reason:string,label:string){
     setBusyItemId(item.id);setMessage('');
     try{const response=await fetch(`${API_BASE}/api/studio/governing-items/${encodeURIComponent(item.id)}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({handlingStatus:'not_applicable',handlingComment:reason})});const result=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(result.error||'Kunde inte markera posten som ej tillämplig.');setMessage(`${item.code||'Posten'} markerades som ej tillämplig ${label}.`);await load()}catch(error){setMessage(error instanceof Error?error.message:'Kunde inte hantera undantaget.')}finally{setBusyItemId('')}
@@ -164,6 +184,20 @@ export function GoverningMappingView({ projectId }: Props) {
       <div><strong>{suggestion.title}</strong><small>{suggestion.area_name} › {suggestion.section_name} › {suggestion.task_title}</small>{suggestion.condition_text&&<small>Villkor: {suggestion.condition_text}</small>}</div>
       <span>{suggestion.confidence}%</span><button disabled={busyItemId === item.id||bulkBusy} onClick={() => void acceptSuggestion(item,suggestion)}>{additional ? 'Lägg till' : 'Koppla'}</button>
     </div>)}</div>;
+  }
+
+  function renderCreationSuggestion(item:MappingItem){
+    const suggestion=item.creation_suggestion;
+    if(!suggestion)return <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.</span></div>;
+    const modeLabel=suggestion.mode==='existing_task'?'I befintligt moment':suggestion.mode==='new_task'?'Nytt moment i befintligt arbetsavsnitt':suggestion.mode==='new_section'?'Nytt arbetsavsnitt i befintligt arbetsområde':'Nytt projektspecifikt arbetsområde';
+    return <div className="mappingNoSuggestion">
+      <b>Föreslagen projektspecifik aktivitet</b>
+      <strong>{suggestion.title}</strong>
+      <span>{modeLabel}</span>
+      <span>{suggestion.areaName} › {suggestion.sectionName} › {suggestion.taskTitle}</span>
+      <small>Placeringens säkerhet: {suggestion.confidence}% · Aktiviteten skapas bara i det här projektet och kopplas direkt till styrposten.</small>
+      <button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void createProjectActivity(item)}>{busyItemId===item.id?'Skapar…':'Skapa projektspecifik aktivitet'}</button>
+    </div>;
   }
 
   if (!data) return <div className="mappingEmpty"><span>🧭</span><h2>Kartläggning</h2><p>{message || 'Läser projektets täckning…'}</p></div>;
@@ -219,7 +253,9 @@ export function GoverningMappingView({ projectId }: Props) {
               : selfBuildException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>Projektet är satt till Egen regi. Punkten avser uttryckligen en totalentreprenör och är därför normalt inte tillämplig.</span><button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void acceptSelfBuildException(item)}>Markera ej tillämplig</button></div>
               : contextException ? <div className="mappingNoSuggestion"><b>Föreslaget undantag utifrån projektkontext</b><span>{item.context_exception?.reason}</span><button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void acceptContextException(item)}>Markera ej tillämplig</button></div>
               : suggestions.length ? renderSuggestions(item,suggestions,false)
-              : <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>{primary==='operation'?'Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.':primary==='condition'?'Posten innehåller ett villkor som också kan behöva kopplas till relevant kontroll eller aktivitet.':'Posten behöver kopplas manuellt eller få en ny aktivitet i projektstrukturen.'}</span></div>}
+              : primary==='operation' ? <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten är ett drift-/förvaltningskrav och behöver hanteras i projektets förvaltningsdel.</span></div>
+              : primary==='condition' ? <div className="mappingNoSuggestion"><b>Ingen tydlig matchning hittad</b><span>Posten innehåller ett villkor som också kan behöva kopplas till relevant kontroll eller aktivitet.</span></div>
+              : renderCreationSuggestion(item)}
           </div>
         </article>;
       })}
