@@ -61,7 +61,7 @@ observer.observe(document.documentElement,{childList:true,subtree:true});
 scan();
 
 // Project hierarchy completion: sections and areas bubble completion upwards.
-// Deprecated activities are ignored at every level.
+// Deprecated activities and tasks with no active activities are ignored.
 let sectionStatusTimer=0;
 async function refreshSectionStatus(){
   const projectId=(document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement|null)?.value||'';
@@ -76,19 +76,20 @@ async function refreshSectionStatus(){
     const metaData=metaResponse.ok?await metaResponse.json():{items:[]};
     const tasks=Array.isArray(taskData.tasks)?taskData.tasks:[];
     const deprecated=new Set<string>((metaData.items||[]).filter((item:any)=>item.applicability==='deprecated').map((item:any)=>item.activity_id));
+    const activeActivities=(task:any)=>(task?.activities||[]).filter((activity:any)=>!deprecated.has(activity.id));
+    const activeTask=(task:any)=>activeActivities(task).length>0;
     const taskComplete=(task:any)=>{
-      const active=(task?.activities||[]).filter((activity:any)=>!deprecated.has(activity.id));
+      const active=activeActivities(task);
       return active.length>0&&active.every((activity:any)=>activity.done);
     };
     const sectionComplete=(area:string,section:string)=>{
-      const sectionTasks=tasks.filter((task:any)=>task.workArea===area&&task.workSection===section);
+      const sectionTasks=tasks.filter((task:any)=>task.workArea===area&&task.workSection===section&&activeTask(task));
       return sectionTasks.length>0&&sectionTasks.every(taskComplete);
     };
     const areaComplete=(area:string)=>{
-      const areaTasks=tasks.filter((task:any)=>task.workArea===area);
+      const areaTasks=tasks.filter((task:any)=>task.workArea===area&&activeTask(task));
       if(!areaTasks.length)return false;
-      const sections=[...new Set(areaTasks.map((task:any)=>String(task.workSection||'')))].filter(Boolean);
-      return sections.length>0&&sections.every(section=>sectionComplete(area,section));
+      return areaTasks.every(taskComplete);
     };
 
     let area='';
