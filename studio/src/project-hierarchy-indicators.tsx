@@ -3,7 +3,7 @@ import './project-hierarchy-indicators.css';
 
 type Activity = { id: string; title: string; done: boolean };
 type Task = { workArea: string; workSection: string; title: string; activities: Activity[] };
-type Meta = { activity_id: string; governing_documents?: unknown[] };
+type Meta = { activity_id: string; applicability?: string; governing_documents?: unknown[] };
 type StatusDetail = { activityId?: string; done?: boolean; projectId?: string };
 
 export function ProjectHierarchyIndicators() {
@@ -26,7 +26,9 @@ export function ProjectHierarchyIndicators() {
       governed.clear();
       for (const task of tasks) {
         for (const activity of task.activities ?? []) {
-          if (!(metadata.get(activity.id)?.governing_documents?.length)) continue;
+          const activityMeta = metadata.get(activity.id);
+          if (activityMeta?.applicability === 'deprecated') continue;
+          if (!(activityMeta?.governing_documents?.length)) continue;
           addGovernedActivity(pathKey(task.workArea), activity.id);
           addGovernedActivity(pathKey(task.workArea, task.workSection), activity.id);
           addGovernedActivity(pathKey(task.workArea, task.workSection, task.title), activity.id);
@@ -93,7 +95,7 @@ export function ProjectHierarchyIndicators() {
 
         if (depth === 4) {
           const activity = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task)
-            ?.activities.find(item => item.title === label);
+            ?.activities.find(item => item.title === label && metadata.get(item.id)?.applicability !== 'deprecated');
           const icon = Array.from(row.children).find(child => child.textContent?.trim() === '○' || child.textContent?.trim() === '✓' || child.classList.contains('hierDone')) as HTMLElement | undefined;
           if (icon && activity) {
             icon.classList.add('hierDone');
@@ -123,7 +125,7 @@ export function ProjectHierarchyIndicators() {
 
         if (nodeType === 'MOMENT') {
           const task = tasks.find(item => item.workArea === path[0] && item.workSection === path[1] && item.title === path[2]);
-          const activity = task?.activities.find(item => item.title === label);
+          const activity = task?.activities.find(item => item.title === label && metadata.get(item.id)?.applicability !== 'deprecated');
           const icon = row.firstElementChild as HTMLElement | null;
           if (activity && icon) {
             icon.textContent = activity.done ? '✓' : '○';
