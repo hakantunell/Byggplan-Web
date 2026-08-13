@@ -11,10 +11,18 @@ type MappingDocument = {
 };
 type HandlingKind='work'|'control'|'administration'|'condition'|'operation'|'evidence'|'deadline';
 type ContextException={status:string;reason:string};
+type CreationMode='existing_task'|'new_task'|'new_section'|'new_area';
 type CreationSuggestion={
-  mode:'existing_task'|'new_task'|'new_section'|'new_area';
+  mode:CreationMode;
   title:string;activityType:string;confidence:number;
   areaId?:string;areaName:string;sectionId?:string;sectionName:string;taskId?:string;taskTitle:string;
+};
+type PlacementTask={id:string;title:string};
+type PlacementSection={id:string;name:string;tasks:PlacementTask[]};
+type PlacementArea={id:string;name:string;sections:PlacementSection[]};
+type CreationForm={
+  title:string;activityType:string;mode:CreationMode;
+  areaId:string;areaName:string;sectionId:string;sectionName:string;taskId:string;taskTitle:string;
 };
 type MappingItem = {
   id: string; governing_document_id: string; code: string; description: string; section_code: string;
@@ -76,6 +84,11 @@ export function GoverningMappingView({ projectId }: Props) {
   const [busyItemId, setBusyItemId] = useState('');
   const [bulkBusy,setBulkBusy]=useState(false);
   const [message, setMessage] = useState('');
+  const [editorItem,setEditorItem]=useState<MappingItem|null>(null);
+  const [placementAreas,setPlacementAreas]=useState<PlacementArea[]>([]);
+  const [creationForm,setCreationForm]=useState<CreationForm|null>(null);
+  const [editorBusy,setEditorBusy]=useState(false);
+  const [editorError,setEditorError]=useState('');
 
   useEffect(() => { void load(); }, [projectId]);
 
@@ -136,18 +149,37 @@ export function GoverningMappingView({ projectId }: Props) {
     } finally { setBusyItemId(''); }
   }
 
-  async function createProjectActivity(item:MappingItem){
-    if(!item.creation_suggestion)return;
-    setBusyItemId(item.id);setMessage('');
+  async function openCreationEditor(item:MappingItem){
+    const suggestion=item.creation_suggestion;if(!suggestion)return;
+    setEditorItem(item);setEditorError('');setEditorBusy(true);
+    setCreationForm({
+      title:suggestion.title,activityType:suggestion.activityType,mode:suggestion.mode,
+      areaId:suggestion.areaId||'',areaName:suggestion.areaName||'',sectionId:suggestion.sectionId||'',sectionName:suggestion.sectionName||'',taskId:suggestion.taskId||'',taskTitle:suggestion.taskTitle||''
+    });
     try{
-      const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-items/${encodeURIComponent(item.id)}/create-project-activity`,{method:'POST'});
+      const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/project-activity-placement-options`,{cache:'no-store'});
+      const result=await response.json().catch(()=>({})) as {error?:string;areas?:PlacementArea[]};
+      if(!response.ok)throw new Error(result.error||'Kunde inte läsa projektstrukturen.');
+      setPlacementAreas(result.areas||[]);
+    }catch(error){setEditorError(error instanceof Error?error.message:'Kunde inte läsa projektstrukturen.');}
+    finally{setEditorBusy(false)}
+  }
+
+  function closeCreationEditor(){if(editorBusy)return;setEditorItem(null);setCreationForm(null);setEditorError('');}
+
+  async function createReviewedProjectActivity(){
+    if(!editorItem||!creationForm)return;
+    setEditorBusy(true);setEditorError('');
+    try{
+      const response=await fetch(`${API_BASE}/api/studio/projects/${encodeURIComponent(projectId)}/governing-items/${encodeURIComponent(editorItem.id)}/create-project-activity-reviewed`,{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(creationForm)
+      });
       const result=await response.json().catch(()=>({})) as {error?:string;created?:{title?:string}};
       if(!response.ok)throw new Error(result.error||'Kunde inte skapa den projektspecifika aktiviteten.');
-      setMessage(`Skapade och kopplade ${result.created?.title||item.creation_suggestion.title}.`);
-      await load();
-    }catch(error){
-      setMessage(error instanceof Error?error.message:'Kunde inte skapa den projektspecifika aktiviteten.');
-    }finally{setBusyItemId('')}
+      setMessage(`Skapade och kopplade ${result.created?.title||creationForm.title}.`);
+      setEditorItem(null);setCreationForm(null);setPlacementAreas([]);await load();
+    }catch(error){setEditorError(error instanceof Error?error.message:'Kunde inte skapa den projektspecifika aktiviteten.');}
+    finally{setEditorBusy(false)}
   }
 
   async function markNotApplicable(item:MappingItem,reason:string,label:string){
@@ -196,7 +228,40 @@ export function GoverningMappingView({ projectId }: Props) {
       <span>{modeLabel}</span>
       <span>{suggestion.areaName} › {suggestion.sectionName} › {suggestion.taskTitle}</span>
       <small>Placeringens säkerhet: {suggestion.confidence}% · Aktiviteten skapas bara i det här projektet och kopplas direkt till styrposten.</small>
-      <button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void createProjectActivity(item)}>{busyItemId===item.id?'Skapar…':'Skapa projektspecifik aktivitet'}</button>
+      <button disabled={busyItemId===item.id||bulkBusy} onClick={()=>void openCreationEditor(item)}>Granska och skapa aktivitet</button>
+    </div>;
+  }
+
+  function renderCreationEditor(){
+    if(!editorItem||!creationForm)return null;
+    const area=placementAreas.find(a=>a.id===creationForm.areaId);
+    const sections=area?.sections||[];
+    const section=sections.find(s=>s.id===creationForm.sectionId);
+    const tasks=section?.tasks||[];
+    const setForm=(patch:Partial<CreationForm>)=>setCreationForm(current=>current?{...current,...patch}:current);
+    const inputStyle={width:'100%',boxSizing:'border-box' as const,padding:'9px 10px',border:'1px solid #cbd5e1',borderRadius:8,background:'#fff'};
+    const labelStyle={display:'grid',gap:5,fontSize:13,fontWeight:600};
+    return <div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(15,23,42,.48)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onMouseDown={event=>{if(event.currentTarget===event.target)closeCreationEditor()}}>
+      <div style={{width:'min(680px,100%)',maxHeight:'90vh',overflow:'auto',background:'#fff',borderRadius:14,boxShadow:'0 20px 60px rgba(0,0,0,.25)',padding:22}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'flex-start',marginBottom:18}}>
+          <div><small>PROJEKTSPECIFIK AKTIVITET</small><h2 style={{margin:'4px 0'}}>Granska före skapande</h2><p style={{margin:0,color:'#475569'}}>Styrpost {editorItem.code||''}: {editorItem.description}</p></div>
+          <button onClick={closeCreationEditor} disabled={editorBusy} aria-label="Stäng">✕</button>
+        </div>
+        <div style={{display:'grid',gap:14}}>
+          <label style={labelStyle}>Titel<input style={inputStyle} value={creationForm.title} onChange={e=>setForm({title:e.target.value})}/></label>
+          <label style={labelStyle}>Typ<select style={inputStyle} value={creationForm.activityType} onChange={e=>setForm({activityType:e.target.value})}><option value="check">KONTROLLERA</option><option value="perform">UTFÖR</option><option value="measurement">MÄT</option><option value="document">DOKUMENTERA</option></select></label>
+          <label style={labelStyle}>Placering<select style={inputStyle} value={creationForm.mode} onChange={e=>{const mode=e.target.value as CreationMode;setForm({mode,taskId:mode==='existing_task'?creationForm.taskId:'',sectionId:mode==='new_area'?'':creationForm.sectionId,areaId:mode==='new_area'?'':creationForm.areaId})}}><option value="existing_task">Befintligt moment</option><option value="new_task">Nytt moment i befintligt arbetsavsnitt</option><option value="new_section">Nytt arbetsavsnitt i befintligt arbetsområde</option><option value="new_area">Nytt arbetsområde</option></select></label>
+          {creationForm.mode!=='new_area'&&<label style={labelStyle}>Arbetsområde<select style={inputStyle} value={creationForm.areaId} onChange={e=>setForm({areaId:e.target.value,sectionId:'',taskId:''})}><option value="">Välj arbetsområde…</option>{placementAreas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+          {(creationForm.mode==='existing_task'||creationForm.mode==='new_task')&&<label style={labelStyle}>Arbetsavsnitt<select style={inputStyle} value={creationForm.sectionId} onChange={e=>setForm({sectionId:e.target.value,taskId:''})}><option value="">Välj arbetsavsnitt…</option>{sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
+          {creationForm.mode==='existing_task'&&<label style={labelStyle}>Moment<select style={inputStyle} value={creationForm.taskId} onChange={e=>setForm({taskId:e.target.value})}><option value="">Välj moment…</option>{tasks.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></label>}
+          {creationForm.mode==='new_task'&&<label style={labelStyle}>Nytt moment<input style={inputStyle} value={creationForm.taskTitle} onChange={e=>setForm({taskTitle:e.target.value})}/></label>}
+          {creationForm.mode==='new_section'&&<><label style={labelStyle}>Nytt arbetsavsnitt<input style={inputStyle} value={creationForm.sectionName} onChange={e=>setForm({sectionName:e.target.value})}/></label><label style={labelStyle}>Nytt moment<input style={inputStyle} value={creationForm.taskTitle} onChange={e=>setForm({taskTitle:e.target.value})}/></label></>}
+          {creationForm.mode==='new_area'&&<><label style={labelStyle}>Nytt arbetsområde<input style={inputStyle} value={creationForm.areaName} onChange={e=>setForm({areaName:e.target.value})}/></label><label style={labelStyle}>Nytt arbetsavsnitt<input style={inputStyle} value={creationForm.sectionName} onChange={e=>setForm({sectionName:e.target.value})}/></label><label style={labelStyle}>Nytt moment<input style={inputStyle} value={creationForm.taskTitle} onChange={e=>setForm({taskTitle:e.target.value})}/></label></>}
+          {editorItem.creation_suggestion&&<small style={{color:'#64748b'}}>Ursprungligt placeringsförslag: {editorItem.creation_suggestion.areaName} › {editorItem.creation_suggestion.sectionName} › {editorItem.creation_suggestion.taskTitle} ({editorItem.creation_suggestion.confidence}%). Master ändras inte.</small>}
+          {editorError&&<div style={{padding:10,borderRadius:8,background:'#fef2f2',color:'#991b1b'}}>{editorError}</div>}
+          <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:4}}><button disabled={editorBusy} onClick={closeCreationEditor}>Avbryt</button><button disabled={editorBusy||!creationForm.title.trim()} onClick={()=>void createReviewedProjectActivity()}>{editorBusy?'Skapar…':'Skapa och koppla'}</button></div>
+        </div>
+      </div>
     </div>;
   }
 
@@ -262,5 +327,6 @@ export function GoverningMappingView({ projectId }: Props) {
       {!visibleItems.length && <div className="mappingEmptyList">{filter === 'uncovered' ? '✓ Alla poster i dokumentet är omhändertagna.' : 'Inga poster att visa.'}</div>}
     </div>
     {message && <div className="mappingMessage">{message}</div>}
+    {renderCreationEditor()}
   </div>;
 }
