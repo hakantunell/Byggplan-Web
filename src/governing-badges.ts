@@ -2,6 +2,7 @@ let installed=false;
 let scheduled=false;
 
 const COUNT_SUFFIX=/\s*📋\s*(\d+)\s*$/;
+const COUNT_ATTRIBUTE='data-governing-count';
 
 function ensureBadge(header:Element,count:number){
   let badge=header.querySelector(':scope > .governingBadge') as HTMLElement|null;
@@ -24,11 +25,21 @@ function normalizeHeader(header:Element){
   const match=text.match(COUNT_SUFFIX);
   if(match){
     const count=Number(match[1]||0);
+    header.setAttribute(COUNT_ATTRIBUTE,String(count));
     title.textContent=text.replace(COUNT_SUFFIX,'').trimEnd();
     ensureBadge(header,count);
     return;
   }
-  // Keep an already-created badge when React has only re-rendered surrounding content.
+
+  // React can re-render the header and remove the injected badge while keeping
+  // the already-normalized title text. Keep the last known count on the stable
+  // header element so the badge can be recreated after that render.
+  const storedCount=Number(header.getAttribute(COUNT_ATTRIBUTE)||0);
+  if(storedCount>0){
+    ensureBadge(header,storedCount);
+    return;
+  }
+
   const badge=header.querySelector(':scope > .governingBadge') as HTMLElement|null;
   if(badge&&!/^📋\s*\d+$/.test(String(badge.textContent||'')))badge.remove();
 }
