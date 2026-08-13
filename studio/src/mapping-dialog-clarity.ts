@@ -60,8 +60,8 @@ const observer=new MutationObserver(scan);
 observer.observe(document.documentElement,{childList:true,subtree:true});
 scan();
 
-// Project hierarchy completion: a work section is complete when every active
-// moment in the section is complete. Deprecated activities are ignored.
+// Project hierarchy completion: sections and areas bubble completion upwards.
+// Deprecated activities are ignored at every level.
 let sectionStatusTimer=0;
 async function refreshSectionStatus(){
   const projectId=(document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement|null)?.value||'';
@@ -84,12 +84,24 @@ async function refreshSectionStatus(){
       const sectionTasks=tasks.filter((task:any)=>task.workArea===area&&task.workSection===section);
       return sectionTasks.length>0&&sectionTasks.every(taskComplete);
     };
+    const areaComplete=(area:string)=>{
+      const areaTasks=tasks.filter((task:any)=>task.workArea===area);
+      if(!areaTasks.length)return false;
+      const sections=[...new Set(areaTasks.map((task:any)=>String(task.workSection||'')))].filter(Boolean);
+      return sections.length>0&&sections.every(section=>sectionComplete(area,section));
+    };
 
     let area='';
     for(const row of Array.from(document.querySelectorAll('.projectTreeRow')) as HTMLElement[]){
       const depth=Math.max(0,Math.round((parseInt(row.style.paddingLeft||'10',10)-10)/16));
       const label=(row.querySelector('.projectTreeLabel')?.textContent||'').trim();
-      if(depth===1)area=label;
+      if(depth===1){
+        area=label;
+        const complete=areaComplete(label);
+        const icon=Array.from(row.children).find(child=>child instanceof HTMLElement&&child.tagName==='SPAN'&&!child.classList.contains('projectTreeLabel')&&!child.classList.contains('navSpacer')&&!child.classList.contains('hierGov')) as HTMLElement|undefined;
+        if(icon){icon.textContent=complete?'✓':'⛏';icon.classList.toggle('hierMomentDone',complete);}
+        continue;
+      }
       if(depth!==2)continue;
       const complete=sectionComplete(area,label);
       const icon=Array.from(row.children).find(child=>child instanceof HTMLElement&&child.tagName==='SPAN'&&!child.classList.contains('projectTreeLabel')&&!child.classList.contains('navSpacer')&&!child.classList.contains('hierGov')) as HTMLElement|undefined;
