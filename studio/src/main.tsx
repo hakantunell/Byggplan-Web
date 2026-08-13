@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './same-origin-api';
+import './mapping-dialog-clarity';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { StudioShell } from './StudioShell';
 import { ProjectOverviewExtras } from './ProjectOverviewExtras';
@@ -14,6 +15,7 @@ import './governing-verifications.css';
 import './governing-verification-lock.css';
 import './governing-mapping.css';
 import './governing-mapping-exception.css';
+import './mapping-dialog-clarity.css';
 import './studio-shell.css';
 import './master-projects.css';
 import './project-support.css';
