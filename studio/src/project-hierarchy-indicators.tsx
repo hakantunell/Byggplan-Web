@@ -4,6 +4,7 @@ import './project-hierarchy-indicators.css';
 type Activity = { id: string; title: string; done: boolean };
 type Task = { workArea: string; workSection: string; title: string; activities: Activity[] };
 type Meta = { activity_id: string; governing_documents?: unknown[] };
+type StatusDetail = { activityId?: string; done?: boolean; projectId?: string };
 
 export function ProjectHierarchyIndicators() {
   useEffect(() => {
@@ -36,9 +37,10 @@ export function ProjectHierarchyIndicators() {
 
     async function load(id: string) {
       try {
+        const cacheBust = Date.now().toString(36);
         const [tasksResponse, metadataResponse] = await Promise.all([
-          fetch(`/api/tasks?projectId=${encodeURIComponent(id)}`, { cache: 'no-store' }),
-          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(id)}`, { cache: 'no-store' })
+          fetch(`/api/tasks?projectId=${encodeURIComponent(id)}&__hier=${cacheBust}`, { cache: 'no-store' }),
+          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(id)}&__hier=${cacheBust}`, { cache: 'no-store' })
         ]);
         tasks = tasksResponse.ok ? ((await tasksResponse.json()).tasks ?? []) : [];
         metadata = metadataResponse.ok
@@ -92,7 +94,7 @@ export function ProjectHierarchyIndicators() {
         if (depth === 4) {
           const activity = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task)
             ?.activities.find(item => item.title === label);
-          const icon = Array.from(row.children).find(child => child.textContent?.trim() === '○' || child.classList.contains('hierDone')) as HTMLElement | undefined;
+          const icon = Array.from(row.children).find(child => child.textContent?.trim() === '○' || child.textContent?.trim() === '✓' || child.classList.contains('hierDone')) as HTMLElement | undefined;
           if (icon && activity) {
             icon.classList.add('hierDone');
             icon.textContent = activity.done ? '✓' : '○';
@@ -138,6 +140,23 @@ export function ProjectHierarchyIndicators() {
       paintDetail();
     }
 
+    function statusChanged(event: Event) {
+      const detail = (event as CustomEvent<StatusDetail>).detail ?? {};
+      if (!detail.activityId || typeof detail.done !== 'boolean') return;
+      if (detail.projectId && projectId && detail.projectId !== projectId) return;
+      let found = false;
+      tasks = tasks.map(task => ({
+        ...task,
+        activities: task.activities.map(activity => {
+          if (activity.id !== detail.activityId) return activity;
+          found = true;
+          return { ...activity, done: detail.done as boolean };
+        })
+      }));
+      if (found) paint();
+      if (projectId) window.setTimeout(() => void load(projectId), 250);
+    }
+
     async function tick() {
       const id = (document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement | null)?.value ?? '';
       if (id && id !== projectId) {
@@ -149,10 +168,12 @@ export function ProjectHierarchyIndicators() {
       timer = window.setTimeout(tick, 500);
     }
 
+    window.addEventListener('byggplan:activity-status-changed', statusChanged as EventListener);
     void tick();
     return () => {
       stopped = true;
       window.clearTimeout(timer);
+      window.removeEventListener('byggplan:activity-status-changed', statusChanged as EventListener);
     };
   }, []);
   return null;
