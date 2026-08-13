@@ -21,6 +21,7 @@ import './master-projects.css';
 import './project-support.css';
 import './project-documents.css';
 import './project-administration.css';
+import './project-detail-tabs.css';
 import './governing-import-action.css';
 import './governing-analysis-action.css';
 
