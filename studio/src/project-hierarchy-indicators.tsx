@@ -1,4 +1,159 @@
-import {useEffect} from'react';
+import { useEffect } from 'react';
 import './project-hierarchy-indicators.css';
-type A={id:string;title:string;done:boolean};type T={workArea:string;workSection:string;title:string;activities:A[]};type M={activity_id:string;governing_documents?:{documentId?:string}[]};
-export function ProjectHierarchyIndicators(){useEffect(()=>{let stop=false,timer=0,pid='',tasks:T[]=[],meta=new Map<string,M>();const key=(...p:string[])=>p.join('›');const gov=new Map<string,Set<string>>();async function load(id:string){try{const[t,m]=await Promise.all([fetch(`/api/tasks?projectId=${encodeURIComponent(id)}`,{cache:'no-store'}),fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(id)}`,{cache:'no-store'})]);tasks=t.ok?((await t.json()).tasks||[]):[];meta=m.ok?new Map(((await m.json()).items||[]).map((x:M)=>[x.activity_id,x])):new Map();build()}catch{}paint()}function add(k:string,id:string){const s=gov.get(k)||new Set<string>();s.add(id);gov.set(k,s)}function build(){gov.clear();for(const t of tasks)for(const a of t.activities||[])for(const d of meta.get(a.id)?.governing_documents||[]){const id=d.documentId||a.id;add(key(t.workArea),id);add(key(t.workArea,t.workSection),id);add(key(t.workArea,t.workSection,t.title),id);add(key(t.workArea,t.workSection,t.title,a.title),id)}}function chip(el:HTMLElement,n:number){let x=el.querySelector('.hierGov') as HTMLElement|null;if(n){if(!x){x=document.createElement('span');x.className='hierGov';el.appendChild(x)}x.textContent=n>1?`📋 ${n}`:'📋';x.title=`${n} styrdokument`}else x?.remove()}function paint(){if(stop)return;let a='',s='',t='';for(const r of [...document.querySelectorAll('.projectTreeRow')] as HTMLElement[]){const d=Math.max(0,Math.round((parseInt(r.style.paddingLeft||'10')-10)/16)),l=(r.querySelector('.projectTreeLabel')?.textContent||'').trim();if(d===1)a=l;if(d===2)s=l;if(d===3)t=l;if(d<1)continue;const k=d===1?key(a):d===2?key(a,s):d===3?key(a,s,t):key(a,s,t,l);chip(r,gov.get(k)?.size||0);if(d===4){const x=tasks.find(q=>q.workArea===a&&q.workSection===s&&q.title===t)?.activities.find(x=>x.title===l);const icon=[...r.children].find(e=>e.textContent?.trim()==='○'||e.classList.contains('hierDone')) as HTMLElement|undefined;if(icon&&x){icon.classList.add('hierDone');icon.textContent=x.done?'✓':'○';icon.classList.toggle('done',x.done)}}}const h=document.querySelector('.projectPage .nodeHeader') as HTMLElement|null;if(h){const p=(h.querySelector('p')?.textContent||'').split('›').map(x=>x.trim()).filter(Boolean),k=key(...p);chip(h,gov.get(k)?.size||0)}const head=(document.querySelector('.projectPage .nodeHeader small')?.textContent||'').trim();if(head==='MOMENT'){const p=(document.querySelector('.projectPage .nodeHeader p')?.textContent||'').split('›').map(x=>x.trim()),tt=tasks.find(q=>q.workArea===p[0]&&q.workSection===p[1]&&q.title===p[2]);for(const row of [...document.querySelectorAll('.projectPage .nodeChildren article')] as HTMLElement[]){const l=(row.querySelector('b')?.textContent||'').trim(),x=tt?.activities.find(a=>a.title===l),i=row.firstElementChild as HTMLElement|null;if(x&&i){i.textContent=x.done?'✓':'○';i.className=x.done?'momentDone':'momentTodo';row.classList.toggle('completed',x.done)}chip(row,gov.get(key(...p,l))?.size||0)}}}async function tick(){const id=(document.querySelector('.projectWorkspace .topbar select')as HTMLSelectElement|null)?.value||'';if(id&&id!==pid){pid=id;await load(id)}else paint();timer=window.setTimeout(tick,500)}void tick();return()=>{stop=true;clearTimeout(timer)}},[]);return null}
+
+type Activity = { id: string; title: string; done: boolean };
+type Task = { workArea: string; workSection: string; title: string; activities: Activity[] };
+type Meta = { activity_id: string; governing_documents?: unknown[] };
+
+export function ProjectHierarchyIndicators() {
+  useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+    let projectId = '';
+    let tasks: Task[] = [];
+    let metadata = new Map<string, Meta>();
+    const governed = new Map<string, Set<string>>();
+    const pathKey = (...parts: string[]) => parts.join('›');
+
+    function addGovernedActivity(path: string, activityId: string) {
+      const ids = governed.get(path) ?? new Set<string>();
+      ids.add(activityId);
+      governed.set(path, ids);
+    }
+
+    function rebuildGovernedIndex() {
+      governed.clear();
+      for (const task of tasks) {
+        for (const activity of task.activities ?? []) {
+          if (!(metadata.get(activity.id)?.governing_documents?.length)) continue;
+          addGovernedActivity(pathKey(task.workArea), activity.id);
+          addGovernedActivity(pathKey(task.workArea, task.workSection), activity.id);
+          addGovernedActivity(pathKey(task.workArea, task.workSection, task.title), activity.id);
+          addGovernedActivity(pathKey(task.workArea, task.workSection, task.title, activity.title), activity.id);
+        }
+      }
+    }
+
+    async function load(id: string) {
+      try {
+        const [tasksResponse, metadataResponse] = await Promise.all([
+          fetch(`/api/tasks?projectId=${encodeURIComponent(id)}`, { cache: 'no-store' }),
+          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(id)}`, { cache: 'no-store' })
+        ]);
+        tasks = tasksResponse.ok ? ((await tasksResponse.json()).tasks ?? []) : [];
+        metadata = metadataResponse.ok
+          ? new Map(((await metadataResponse.json()).items ?? []).map((item: Meta) => [item.activity_id, item]))
+          : new Map();
+        rebuildGovernedIndex();
+      } catch {
+        tasks = [];
+        metadata = new Map();
+        governed.clear();
+      }
+      paint();
+    }
+
+    function setGovernedChip(element: HTMLElement, count: number) {
+      let chip = Array.from(element.children).find(child => child.classList.contains('hierGov')) as HTMLElement | undefined;
+      if (!count) {
+        chip?.remove();
+        return;
+      }
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'hierGov';
+        element.appendChild(chip);
+      }
+      chip.textContent = count > 1 ? `📋 ${count}` : '📋';
+      chip.title = count === 1
+        ? '1 aktivitet har koppling till styrdokument'
+        : `${count} aktiviteter har koppling till styrdokument`;
+    }
+
+    function paintTree() {
+      let area = '';
+      let section = '';
+      let task = '';
+      const rows = Array.from(document.querySelectorAll('.projectTreeRow')) as HTMLElement[];
+      for (const row of rows) {
+        const depth = Math.max(0, Math.round((parseInt(row.style.paddingLeft || '10', 10) - 10) / 16));
+        const label = (row.querySelector('.projectTreeLabel')?.textContent ?? '').trim();
+        if (depth === 1) area = label;
+        if (depth === 2) section = label;
+        if (depth === 3) task = label;
+        if (depth < 1) continue;
+
+        const key = depth === 1 ? pathKey(area)
+          : depth === 2 ? pathKey(area, section)
+          : depth === 3 ? pathKey(area, section, task)
+          : pathKey(area, section, task, label);
+        setGovernedChip(row, governed.get(key)?.size ?? 0);
+
+        if (depth === 4) {
+          const activity = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task)
+            ?.activities.find(item => item.title === label);
+          const icon = Array.from(row.children).find(child => child.textContent?.trim() === '○' || child.classList.contains('hierDone')) as HTMLElement | undefined;
+          if (icon && activity) {
+            icon.classList.add('hierDone');
+            icon.textContent = activity.done ? '✓' : '○';
+            icon.classList.toggle('done', activity.done);
+          }
+        }
+      }
+    }
+
+    function paintDetail() {
+      const header = document.querySelector('.projectPage .nodeHeader') as HTMLElement | null;
+      if (!header) return;
+      const nodeType = (header.querySelector('small')?.textContent ?? '').trim();
+      const path = (header.querySelector('p')?.textContent ?? '').split('›').map(value => value.trim()).filter(Boolean);
+      if (!path.length) return;
+
+      setGovernedChip(header, governed.get(pathKey(...path))?.size ?? 0);
+      const rows = Array.from(document.querySelectorAll('.projectPage .nodeChildren article')) as HTMLElement[];
+      for (const row of rows) {
+        const label = (row.querySelector('b')?.textContent ?? '').trim();
+        let childPath = '';
+        if (nodeType === 'ARBETSOMRÅDE') childPath = pathKey(path[0], label);
+        if (nodeType === 'ARBETSAVSNITT') childPath = pathKey(path[0], path[1], label);
+        if (nodeType === 'MOMENT') childPath = pathKey(path[0], path[1], path[2], label);
+        if (childPath) setGovernedChip(row, governed.get(childPath)?.size ?? 0);
+
+        if (nodeType === 'MOMENT') {
+          const task = tasks.find(item => item.workArea === path[0] && item.workSection === path[1] && item.title === path[2]);
+          const activity = task?.activities.find(item => item.title === label);
+          const icon = row.firstElementChild as HTMLElement | null;
+          if (activity && icon) {
+            icon.textContent = activity.done ? '✓' : '○';
+            icon.className = activity.done ? 'momentDone' : 'momentTodo';
+            row.classList.toggle('completed', activity.done);
+          }
+        }
+      }
+    }
+
+    function paint() {
+      if (stopped) return;
+      paintTree();
+      paintDetail();
+    }
+
+    async function tick() {
+      const id = (document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement | null)?.value ?? '';
+      if (id && id !== projectId) {
+        projectId = id;
+        await load(id);
+      } else {
+        paint();
+      }
+      timer = window.setTimeout(tick, 500);
+    }
+
+    void tick();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+  return null;
+}
