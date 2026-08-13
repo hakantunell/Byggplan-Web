@@ -59,3 +59,56 @@ function scan(){
 const observer=new MutationObserver(scan);
 observer.observe(document.documentElement,{childList:true,subtree:true});
 scan();
+
+// Project hierarchy completion: a work section is complete when every active
+// moment in the section is complete. Deprecated activities are ignored.
+let sectionStatusTimer=0;
+async function refreshSectionStatus(){
+  const projectId=(document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement|null)?.value||'';
+  if(!projectId){sectionStatusTimer=window.setTimeout(refreshSectionStatus,1000);return;}
+  try{
+    const bust=Date.now().toString(36);
+    const[taskResponse,metaResponse]=await Promise.all([
+      fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__section=${bust}`,{cache:'no-store'}),
+      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}&__section=${bust}`,{cache:'no-store'})
+    ]);
+    const taskData=taskResponse.ok?await taskResponse.json():{tasks:[]};
+    const metaData=metaResponse.ok?await metaResponse.json():{items:[]};
+    const tasks=Array.isArray(taskData.tasks)?taskData.tasks:[];
+    const deprecated=new Set<string>((metaData.items||[]).filter((item:any)=>item.applicability==='deprecated').map((item:any)=>item.activity_id));
+    const taskComplete=(task:any)=>{
+      const active=(task?.activities||[]).filter((activity:any)=>!deprecated.has(activity.id));
+      return active.length>0&&active.every((activity:any)=>activity.done);
+    };
+    const sectionComplete=(area:string,section:string)=>{
+      const sectionTasks=tasks.filter((task:any)=>task.workArea===area&&task.workSection===section);
+      return sectionTasks.length>0&&sectionTasks.every(taskComplete);
+    };
+
+    let area='';
+    for(const row of Array.from(document.querySelectorAll('.projectTreeRow')) as HTMLElement[]){
+      const depth=Math.max(0,Math.round((parseInt(row.style.paddingLeft||'10',10)-10)/16));
+      const label=(row.querySelector('.projectTreeLabel')?.textContent||'').trim();
+      if(depth===1)area=label;
+      if(depth!==2)continue;
+      const complete=sectionComplete(area,label);
+      const icon=Array.from(row.children).find(child=>child instanceof HTMLElement&&child.tagName==='SPAN'&&!child.classList.contains('projectTreeLabel')&&!child.classList.contains('navSpacer')&&!child.classList.contains('hierGov')) as HTMLElement|undefined;
+      if(icon){icon.textContent=complete?'✓':'⌖';icon.classList.toggle('hierMomentDone',complete);}
+    }
+
+    const header=document.querySelector('.projectPage .nodeHeader') as HTMLElement|null;
+    if((header?.querySelector('small')?.textContent||'').trim()==='ARBETSOMRÅDE'){
+      const selectedArea=((header?.querySelector('p')?.textContent||'').split('›')[0]||'').trim();
+      for(const row of Array.from(document.querySelectorAll('.projectPage .nodeChildren article')) as HTMLElement[]){
+        const label=(row.querySelector('b')?.textContent||'').trim();
+        const complete=sectionComplete(selectedArea,label);
+        const icon=row.firstElementChild as HTMLElement|null;
+        if(icon){icon.textContent=complete?'✓':'⌖';icon.className=complete?'momentDone hierMomentDone':'momentTodo';}
+        row.classList.toggle('completed',complete);
+      }
+    }
+  }catch{}
+  sectionStatusTimer=window.setTimeout(refreshSectionStatus,1200);
+}
+window.addEventListener('byggplan:activity-status-changed',()=>void refreshSectionStatus());
+void refreshSectionStatus();
