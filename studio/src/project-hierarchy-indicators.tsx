@@ -57,7 +57,7 @@ export function ProjectHierarchyIndicators() {
       paint();
     }
 
-    function setGovernedChip(element: HTMLElement, count: number) {
+    function setGovernedChip(element: HTMLElement, count: number, showCount = true) {
       let chip = Array.from(element.children).find(child => child.classList.contains('hierGov')) as HTMLElement | undefined;
       if (!count) {
         chip?.remove();
@@ -68,7 +68,7 @@ export function ProjectHierarchyIndicators() {
         chip.className = 'hierGov';
         element.appendChild(chip);
       }
-      chip.textContent = count > 1 ? `📋 ${count}` : '📋';
+      chip.textContent = showCount ? `📋 ${count}` : '📋';
       chip.title = count === 1
         ? '1 aktivitet har koppling till styrdokument'
         : `${count} aktiviteter har koppling till styrdokument`;
@@ -91,7 +91,7 @@ export function ProjectHierarchyIndicators() {
           : depth === 2 ? pathKey(area, section)
           : depth === 3 ? pathKey(area, section, task)
           : pathKey(area, section, task, label);
-        setGovernedChip(row, governed.get(key)?.size ?? 0);
+        setGovernedChip(row, governed.get(key)?.size ?? 0, depth !== 4);
 
         if (depth === 4) {
           const activity = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task)
@@ -113,7 +113,7 @@ export function ProjectHierarchyIndicators() {
       const path = (header.querySelector('p')?.textContent ?? '').split('›').map(value => value.trim()).filter(Boolean);
       if (!path.length) return;
 
-      setGovernedChip(header, governed.get(pathKey(...path))?.size ?? 0);
+      setGovernedChip(header, governed.get(pathKey(...path))?.size ?? 0, nodeType !== 'AKTIVITET');
       const rows = Array.from(document.querySelectorAll('.projectPage .nodeChildren article')) as HTMLElement[];
       for (const row of rows) {
         const label = (row.querySelector('b')?.textContent ?? '').trim();
@@ -121,7 +121,7 @@ export function ProjectHierarchyIndicators() {
         if (nodeType === 'ARBETSOMRÅDE') childPath = pathKey(path[0], label);
         if (nodeType === 'ARBETSAVSNITT') childPath = pathKey(path[0], path[1], label);
         if (nodeType === 'MOMENT') childPath = pathKey(path[0], path[1], path[2], label);
-        if (childPath) setGovernedChip(row, governed.get(childPath)?.size ?? 0);
+        if (childPath) setGovernedChip(row, governed.get(childPath)?.size ?? 0, nodeType !== 'MOMENT');
 
         if (nodeType === 'MOMENT') {
           const task = tasks.find(item => item.workArea === path[0] && item.workSection === path[1] && item.title === path[2]);
