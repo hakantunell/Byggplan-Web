@@ -4,20 +4,33 @@ export function ProjectHierarchyStatusV2() {
   useEffect(() => {
     let timer = 0;
     let stopped = false;
+    let refreshGeneration = 0;
 
     function taskComplete(task: any) {
       return Boolean(task?.activities?.length) && task.activities.every((activity: any) => activity.done);
     }
 
+    function schedule(delay = 1400) {
+      window.clearTimeout(timer);
+      if (!stopped) timer = window.setTimeout(() => void refresh(), delay);
+    }
+
     async function refresh() {
       if (stopped) return;
+      window.clearTimeout(timer);
+      const generation = ++refreshGeneration;
       const projectId = (document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement | null)?.value || '';
       if (!projectId) {
-        timer = window.setTimeout(refresh, 1000);
+        schedule(1000);
         return;
       }
       try {
-        const response = await fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' });
+        const cacheBust = Date.now().toString(36);
+        const response = await fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        });
+        if (stopped || generation !== refreshGeneration) return;
         const data = response.ok ? await response.json() : { tasks: [] };
         const tasks = Array.isArray(data.tasks) ? data.tasks : [];
 
@@ -59,13 +72,25 @@ export function ProjectHierarchyStatusV2() {
           }
         }
       } catch {}
-      timer = window.setTimeout(refresh, 1200);
+      schedule();
     }
 
+    function statusClick(event: Event) {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('.activityDone, .activityQuickStatus button')) return;
+      // The activity PUT is asynchronous. Refresh once quickly and once after
+      // the write/load cycle has had time to complete.
+      window.setTimeout(() => void refresh(), 180);
+      window.setTimeout(() => void refresh(), 650);
+    }
+
+    document.addEventListener('click', statusClick, true);
     void refresh();
     return () => {
       stopped = true;
+      refreshGeneration += 1;
       window.clearTimeout(timer);
+      document.removeEventListener('click', statusClick, true);
     };
   }, []);
   return null;
