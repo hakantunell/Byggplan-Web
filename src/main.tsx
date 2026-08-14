@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './same-origin-api';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { DemoProfileSwitcher, installDemoFetchIdentity } from './DemoProfileSwitcher';
 import { installProjectSupportBridge } from './project-support-bridge';
