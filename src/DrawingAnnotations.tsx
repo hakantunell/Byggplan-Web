@@ -73,7 +73,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
   const onPointerEnd=()=>{cancelLongPress();pointerStart.current=null};
 
   const createAnnotation=async(point:Point)=>{
-    const r=await fetch(`${apiBase}/api/project-document-annotations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
+    const r=await fetch(`${apiBase}/api/project-document-annotations`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
     if(!r.ok)throw new Error(await apiError(r,'Markeringen kunde inte skapas.'));
     const d=await r.json().catch(()=>({})) as {id?:string};if(!d.id)throw new Error(`Markeringen kunde inte skapas. API:t svarade HTTP ${r.status} utan id.`);return d.id;
   };
@@ -81,7 +81,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     const note=noteText.trim();if(!note)return;setBusy(true);
     try{
       let annotationId=selected||undefined;if(!annotationId){if(!pending)return;annotationId=await createAnnotation(pending)}
-      const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/notes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
+      const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/notes`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
       setNoteText('');setAddingNote(false);setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Notisen kunde inte sparas.')}finally{setBusy(false)}
   };
@@ -90,7 +90,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     if(!photoTarget)return;setBusy(true);
     try{
       let annotationId=photoTarget.annotationId;if(!annotationId){if(!photoTarget.point)return;annotationId=await createAnnotation(photoTarget.point)}
-      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/photos`,{method:'POST',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
+      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/photos`,{method:'PUT',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
       setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Fotot kunde inte sparas.')}finally{setBusy(false);setPhotoTarget(null)}
   };
