@@ -1,0 +1,18 @@
+@media(min-width:768px){
+  body{background:#eef2ef}
+  .fieldResponsiveShell{height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr);overflow:hidden;background:#eef2ef}
+  .fieldDesktopNav{display:flex;flex-direction:column;min-width:0;overflow:auto;background:#f8faf9;border-right:1px solid #d4ddd7;padding:14px 10px 30px}
+  .fieldDesktopNavHeader{padding:4px 10px 14px;border-bottom:1px solid #e0e6e2;margin-bottom:8px;display:flex;flex-direction:column;gap:3px}.fieldDesktopNavHeader small{font-size:10px;letter-spacing:.12em;font-weight:800;color:#7a8880}.fieldDesktopNavHeader strong{font-size:15px;color:#25372d}
+  .fieldTreeRoot,.fieldTreeCategory,.fieldTreeDocument{width:100%;border:0;background:transparent;color:#34473c;text-align:left;cursor:pointer;border-radius:8px}
+  .fieldTreeRoot{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:7px;padding:11px 10px;font-weight:800}.fieldTreeRoot:hover,.fieldTreeRoot.active{background:#dceadf;color:#183e27}
+  .fieldTreeGroup{margin-top:6px}.fieldTreeGroupTitle{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:7px;padding:10px;color:#34473c}.fieldTreeGroupTitle small{color:#7a8880;font-size:10px}
+  .fieldTreeCategory{display:grid;grid-template-columns:14px 22px minmax(0,1fr) auto;align-items:center;gap:5px;padding:9px 10px}.fieldTreeCategory:hover{background:#edf3ef}.fieldTreeCategory strong{font-size:12px}.fieldTreeCategory small{font-size:10px;color:#7b8981}
+  .fieldTreeChildren{padding-left:26px}.fieldTreeDocument{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;gap:6px;padding:8px 9px;font-size:12px}.fieldTreeDocument:hover,.fieldTreeDocument.active{background:#dceadf;color:#163c26}.fieldTreeDocument span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fieldTreeEmpty{display:block;padding:6px 9px 9px;color:#89968f;font-size:11px}
+  .fieldDesktopNavMessage{margin:12px 8px;color:#9a4a3c;font-size:11px;line-height:1.4}
+  .fieldDesktopDetail{min-width:0;min-height:0;height:100vh;overflow:hidden;background:#eef2ef}.fieldActivitiesPane{height:100%;overflow:auto}.fieldActivitiesPane.hidden{display:none}
+  .fieldResponsiveShell .app{max-width:none;margin:0;min-height:100%;padding-bottom:0}.fieldResponsiveShell .app>header{position:sticky;top:0;z-index:20}.fieldResponsiveShell .app main{padding-bottom:40px}
+  .fieldMobileDocuments{display:none}
+  .fieldDocumentViewer{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);background:#eef2ef}.fieldDocumentViewer>header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:18px 22px;background:#fff;border-bottom:1px solid #d5ddd8}.fieldDocumentViewer>header small{font-size:10px;letter-spacing:.12em;font-weight:800;color:#79877f}.fieldDocumentViewer>header h1{font-size:22px;margin:3px 0}.fieldDocumentViewer>header p{margin:4px 0 0;color:#68776f}.fieldDocumentViewer>header>span{max-width:40%;color:#738179;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fieldDocumentCanvas{min-width:0;min-height:0;overflow:auto;padding:18px;display:flex;align-items:flex-start;justify-content:center}.fieldDocumentCanvas img{max-width:100%;height:auto;display:block;background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.08)}.fieldDocumentCanvas iframe{width:100%;height:100%;min-height:600px;border:1px solid #d5ddd8;background:#fff;border-radius:8px}.fieldDocumentEmpty{margin:auto;color:#738179;text-align:center;padding:40px}
+}
+@media(max-width:767px){.fieldResponsiveShell{display:block}.fieldDesktopNav{display:none}.fieldDesktopDetail{display:block}.fieldMobileDocuments{display:block}}
