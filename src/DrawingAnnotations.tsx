@@ -9,6 +9,13 @@ type AnnotationPhoto={id:string;originalName:string;contentType:string;sizeBytes
 type Annotation={id:string;documentId:string;pageNumber:number;x:number;y:number;createdAt:string;notes:AnnotationNote[];photos:AnnotationPhoto[]};
 type Point={x:number;y:number;pageNumber:number};
 
+async function apiError(response:Response,fallback:string){
+  const text=await response.text().catch(()=>'');
+  try{const data=JSON.parse(text) as {error?:string};if(data.error)return data.error}catch{}
+  const compact=text.replace(/\s+/g,' ').trim().slice(0,180);
+  return `${fallback} (HTTP ${response.status}${compact?`: ${compact}`:''})`;
+}
+
 export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
   const[annotations,setAnnotations]=useState<Annotation[]>([]);
   const[pageNumber,setPageNumber]=useState(1);
@@ -29,9 +36,9 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
   const loadAnnotations=useCallback(async()=>{
     try{
       const r=await fetch(`${apiBase}/api/project-document-annotations?documentId=${encodeURIComponent(documentId)}`,{cache:'no-store'});
-      const d=await r.json().catch(()=>({})) as {annotations?:Annotation[];error?:string};
-      if(!r.ok)throw new Error(d.error||'Kunde inte läsa markeringar.');
-      setAnnotations(d.annotations||[]);
+      if(!r.ok)throw new Error(await apiError(r,'Kunde inte läsa markeringar.'));
+      const d=await r.json() as {annotations?:Annotation[]};
+      setAnnotations(d.annotations||[]);setLoadError('');
     }catch(error){setLoadError(error instanceof Error?error.message:'Kunde inte läsa markeringar.');}
   },[apiBase,documentId]);
 
@@ -42,7 +49,6 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     let cancelled=false;let task:any;
     void(async()=>{
       try{
-        setLoadError('');
         task=pdfjs.getDocument(objectUrl);const pdf=await task.promise;if(cancelled)return;setPageCount(pdf.numPages);if(pageNumber>pdf.numPages)setPageNumber(1);
         const page=await pdf.getPage(Math.min(pageNumber,pdf.numPages));if(cancelled)return;
         const base=page.getViewport({scale:1});const available=Math.max(360,(surfaceRef.current?.parentElement?.clientWidth||base.width)-6);const scale=Math.min(2,available/base.width);const viewport=page.getViewport({scale});
@@ -68,13 +74,14 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
 
   const createAnnotation=async(point:Point)=>{
     const r=await fetch(`${apiBase}/api/project-document-annotations`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
-    const d=await r.json().catch(()=>({})) as {id?:string;error?:string};if(!r.ok||!d.id)throw new Error(d.error||'Markeringen kunde inte skapas.');return d.id;
+    if(!r.ok)throw new Error(await apiError(r,'Markeringen kunde inte skapas.'));
+    const d=await r.json().catch(()=>({})) as {id?:string};if(!d.id)throw new Error(`Markeringen kunde inte skapas. API:t svarade HTTP ${r.status} utan id.`);return d.id;
   };
   const saveNote=async()=>{
     const note=noteText.trim();if(!note)return;setBusy(true);
     try{
       let annotationId=selected||undefined;if(!annotationId){if(!pending)return;annotationId=await createAnnotation(pending)}
-      const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/notes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});const d=await r.json().catch(()=>({})) as {error?:string};if(!r.ok)throw new Error(d.error||'Notisen kunde inte sparas.');
+      const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/notes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
       setNoteText('');setAddingNote(false);setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Notisen kunde inte sparas.')}finally{setBusy(false)}
   };
@@ -83,7 +90,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     if(!photoTarget)return;setBusy(true);
     try{
       let annotationId=photoTarget.annotationId;if(!annotationId){if(!photoTarget.point)return;annotationId=await createAnnotation(photoTarget.point)}
-      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/photos`,{method:'POST',body:form});const d=await r.json().catch(()=>({})) as {error?:string};if(!r.ok)throw new Error(d.error||'Fotot kunde inte sparas.');
+      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/photos`,{method:'POST',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
       setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Fotot kunde inte sparas.')}finally{setBusy(false);setPhotoTarget(null)}
   };
