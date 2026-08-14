@@ -4,7 +4,6 @@ type MetaItem={activity_id:string;applicability?:string};
 
 export function ProjectHierarchyStatusV2() {
   useEffect(() => {
-    let timer = 0;
     let stopped = false;
     let refreshGeneration = 0;
 
@@ -13,31 +12,15 @@ export function ProjectHierarchyStatusV2() {
       return active.length > 0 && active.every((activity: any) => activity.done);
     }
 
-    function schedule(delay = 1400) {
-      window.clearTimeout(timer);
-      if (!stopped) timer = window.setTimeout(() => void refresh(), delay);
-    }
-
     async function refresh() {
       if (stopped) return;
-      window.clearTimeout(timer);
       const generation = ++refreshGeneration;
       const projectId = (document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement | null)?.value || '';
-      if (!projectId) {
-        schedule(1000);
-        return;
-      }
+      if (!projectId) return;
       try {
-        const cacheBust = Date.now().toString(36);
         const [taskResponse, metadataResponse] = await Promise.all([
-          fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
-            cache: 'no-store',
-            headers: { 'Cache-Control': 'no-cache' }
-          }),
-          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}&__status=${cacheBust}`, {
-            cache: 'no-store',
-            headers: { 'Cache-Control': 'no-cache' }
-          })
+          fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' }),
+          fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`, { cache: 'no-store' })
         ]);
         if (stopped || generation !== refreshGeneration) return;
         const data = taskResponse.ok ? await taskResponse.json() : { tasks: [] };
@@ -83,23 +66,23 @@ export function ProjectHierarchyStatusV2() {
           }
         }
       } catch {}
-      schedule();
     }
 
     function statusClick(event: Event) {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('.activityDone, .activityQuickStatus button')) return;
-      window.setTimeout(() => void refresh(), 180);
-      window.setTimeout(() => void refresh(), 650);
+      window.setTimeout(() => void refresh(), 220);
     }
+    const changed=()=>void refresh();
 
     document.addEventListener('click', statusClick, true);
+    window.addEventListener('byggplan:activity-status-changed',changed);
     void refresh();
     return () => {
       stopped = true;
       refreshGeneration += 1;
-      window.clearTimeout(timer);
       document.removeEventListener('click', statusClick, true);
+      window.removeEventListener('byggplan:activity-status-changed',changed);
     };
   }, []);
   return null;
