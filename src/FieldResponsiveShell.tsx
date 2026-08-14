@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {App} from './App';
 import {ProjectDocumentsBar} from './ProjectDocumentsBar';
+import {DrawingAnnotations} from './DrawingAnnotations';
 
 type Attachment={id:string;originalName:string;contentType:string;sizeBytes:number;url:string};
 type ProjectDocument={id:string;title:string;description:string;category?:string;attachments:Attachment[]};
@@ -95,7 +96,8 @@ function DocumentNode({document,selected,onSelect}:{document:ProjectDocument;sel
 
 function DocumentViewer({document,file,objectUrl,message}:{document?:ProjectDocument;file?:Attachment;objectUrl:string;message:string}){
   if(!document)return <div className="fieldDocumentEmpty">Dokumentet kunde inte hittas.</div>;
-  return <div className="fieldDocumentViewer"><header><div><small>PROJEKTDOKUMENT</small><h1>{document.title}</h1>{document.description&&<p>{document.description}</p>}</div>{file&&<span>{file.originalName}</span>}</header><div className="fieldDocumentCanvas">{message&&<div className="fieldDocumentEmpty">{message}</div>}{!message&&!file&&<div className="fieldDocumentEmpty">Dokumentet saknar fil.</div>}{!message&&file&&!objectUrl&&<div className="fieldDocumentEmpty">Öppnar dokument…</div>}{!message&&file&&objectUrl&&(file.contentType.startsWith('image/')?<img src={objectUrl} alt={document.title}/>:<iframe src={objectUrl} title={document.title}/>)}</div></div>;
+  const drawing=isDrawing(document);
+  return <div className="fieldDocumentViewer"><header><div><small>PROJEKTDOKUMENT</small><h1>{document.title}</h1>{document.description&&<p>{document.description}</p>}</div>{file&&<span>{file.originalName}</span>}</header><div className={`fieldDocumentCanvas ${drawing?'annotatable':''}`}>{message&&<div className="fieldDocumentEmpty">{message}</div>}{!message&&!file&&<div className="fieldDocumentEmpty">Dokumentet saknar fil.</div>}{!message&&file&&!objectUrl&&<div className="fieldDocumentEmpty">Öppnar dokument…</div>}{!message&&file&&objectUrl&&(drawing?<DrawingAnnotations documentId={document.id} title={document.title} file={file} objectUrl={objectUrl} apiBase={API_BASE}/>:file.contentType.startsWith('image/')?<img src={objectUrl} alt={document.title}/>:<iframe src={objectUrl} title={document.title}/>)}</div></div>;
 }
 
 function isDrawing(document:ProjectDocument){
