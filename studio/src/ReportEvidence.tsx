@@ -9,14 +9,18 @@ type Evidence={activityId:string;activityTitle:string;activityType:string;note:s
 const cache=new Map<string,Promise<Evidence[]>>();
 function loadProject(projectId:string){
  let current=cache.get(projectId);
- if(!current){current=fetch(`/api/projects/${encodeURIComponent(projectId)}/activity-documentation-summary`,{cache:'no-store'}).then(async r=>{if(!r.ok)throw new Error('Kunde inte läsa bifogat underlag.');const d=await r.json() as {items?:Evidence[]};return d.items||[]});cache.set(projectId,current)}
+ if(!current){
+  current=fetch(`/api/projects/${encodeURIComponent(projectId)}/activity-documentation-summary`,{cache:'no-store'}).then(async r=>{if(!r.ok){const d=await r.json().catch(()=>({})) as {error?:string};throw new Error(d.error||`Kunde inte läsa bifogat underlag (${r.status}).`)}const d=await r.json() as {items?:Evidence[]};return d.items||[]}).catch(error=>{cache.delete(projectId);throw error});
+  cache.set(projectId,current);
+ }
  return current;
 }
 
 export function ReportEvidence({projectId,activityIds}:{projectId:string;activityIds:string[]}){
- const[items,setItems]=useState<Evidence[]>([]);
- useEffect(()=>{let alive=true;void loadProject(projectId).then(rows=>{if(alive)setItems(rows)}).catch(()=>{});return()=>{alive=false}},[projectId]);
+ const[items,setItems]=useState<Evidence[]>([]),[error,setError]=useState('');
+ useEffect(()=>{let alive=true;setError('');void loadProject(projectId).then(rows=>{if(alive)setItems(rows)}).catch(err=>{if(alive)setError(err instanceof Error?err.message:'Kunde inte läsa bifogat underlag.')});return()=>{alive=false}},[projectId]);
  const selected=useMemo(()=>{const ids=new Set(activityIds);return items.filter(item=>ids.has(item.activityId)&&hasEvidence(item))},[items,activityIds.join('|')]);
+ if(error)return <div className="reportEvidenceError">⚠ {error}</div>;
  if(!selected.length)return null;
  return <div className="reportEvidence"><strong>📎 Bifogat underlag</strong>{selected.map(item=><div className="reportEvidenceActivity" key={item.activityId}><small>{item.activityTitle}</small>{item.note.trim()&&<p className="reportEvidenceNote">{item.note}</p>}<div className="reportEvidenceItems">{item.requiredFields.flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>))}{item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>)}</div></div>)}</div>
 }
