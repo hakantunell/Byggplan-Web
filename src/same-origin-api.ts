@@ -1,28 +1,70 @@
 const nativeFetch = window.fetch.bind(window);
 
-function rewriteApiUrl(value: string): string {
+type ApiTargets = { root: string; sameOrigin: string; original: string } | null;
+
+function apiTargets(value: string): ApiTargets {
   try {
     const url = new URL(value, window.location.origin);
     const isApiHost = url.hostname === 'api.byggplan.tunell.org';
     const isFieldHost = url.origin === window.location.origin;
-    if (!url.pathname.startsWith('/api/') || (!isApiHost && !isFieldHost)) return value;
+    if (!url.pathname.startsWith('/api/') || (!isApiHost && !isFieldHost)) return null;
 
-    // Keep browser-visible API traffic on the site root. The Pages middleware
-    // translates __bp_route server-side before forwarding to the API worker.
-    const transport = new URL('/', window.location.origin);
-    transport.searchParams.set('__bp_route', url.pathname);
-    url.searchParams.forEach((entryValue, key) => transport.searchParams.append(key, entryValue));
-    return transport.toString();
+    const root = new URL('/', window.location.origin);
+    root.searchParams.set('__bp_route', url.pathname);
+    url.searchParams.forEach((entryValue, key) => root.searchParams.append(key, entryValue));
+
+    const sameOrigin = new URL(url.pathname, window.location.origin);
+    sameOrigin.search = url.search;
+
+    return { root: root.toString(), sameOrigin: sameOrigin.toString(), original: url.toString() };
   } catch {
-    return value;
+    return null;
   }
 }
 
-window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-  if (typeof input === 'string') return nativeFetch(rewriteApiUrl(input), init);
-  if (input instanceof URL) return nativeFetch(new URL(rewriteApiUrl(input.toString())), init);
+function looksLikeHtml(response: Response) {
+  return (response.headers.get('content-type') || '').toLowerCase().includes('text/html');
+}
 
-  const rewritten = rewriteApiUrl(input.url);
-  if (rewritten !== input.url) return nativeFetch(new Request(rewritten, input), init);
-  return nativeFetch(input, init);
+async function fetchWithFieldTransport(value: string, init?: RequestInit): Promise<Response> {
+  const targets = apiTargets(value);
+  if (!targets) return nativeFetch(value, init);
+
+  // 1. Studio-style root transport. This is the preferred path on restrictive networks.
+  try {
+    const response = await nativeFetch(targets.root, init);
+    if (!looksLikeHtml(response)) return response;
+  } catch {}
+
+  // 2. Existing same-origin Pages API proxy. This restores normal Field app operation
+  // even if the root transport is not active in a particular Pages deployment.
+  try {
+    const response = await nativeFetch(targets.sameOrigin, init);
+    if (!looksLikeHtml(response)) return response;
+  } catch {}
+
+  // 3. Last-resort direct API call, matching the Field app's original behaviour.
+  return nativeFetch(targets.original, init);
+}
+
+window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  if (typeof input === 'string') return fetchWithFieldTransport(input, init);
+  if (input instanceof URL) return fetchWithFieldTransport(input.toString(), init);
+
+  const targets = apiTargets(input.url);
+  if (!targets) return nativeFetch(input, init);
+
+  // Request bodies are one-shot streams. Clone once for each transport attempt.
+  const tryRequest = async (url: string, source: Request) => nativeFetch(new Request(url, source.clone()), init);
+  return (async () => {
+    try {
+      const response = await tryRequest(targets.root, input);
+      if (!looksLikeHtml(response)) return response;
+    } catch {}
+    try {
+      const response = await tryRequest(targets.sameOrigin, input);
+      if (!looksLikeHtml(response)) return response;
+    } catch {}
+    return tryRequest(targets.original, input);
+  })();
 }) as typeof window.fetch;
