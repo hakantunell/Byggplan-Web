@@ -26,6 +26,7 @@ import './project-workspace-v2.css';
 import './api-browser.css';
 import './governing-import-action.css';
 import './governing-analysis-action.css';
+import './governing-workspace-nav.css';
 
 installExecutionContextBridge();
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><StudioShell/><MasterV2UpgradeAction/></React.StrictMode>);
