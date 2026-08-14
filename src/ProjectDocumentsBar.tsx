@@ -30,7 +30,6 @@ export function ProjectDocumentsBar({projectId:projectIdProp}:{projectId?:string
   },[projectId]);
 
   useEffect(()=>{if(!projectId)return;setDocuments([]);setOpen(false);void loadDocuments()},[projectId,loadDocuments]);
-  useEffect(()=>{const timer=window.setInterval(()=>{if(document.visibilityState==='visible')void loadDocuments()},15000);return()=>window.clearInterval(timer)},[loadDocuments]);
   useEffect(()=>{const onVisible=()=>{if(document.visibilityState==='visible')void loadDocuments()};document.addEventListener('visibilitychange',onVisible);return()=>document.removeEventListener('visibilitychange',onVisible)},[loadDocuments]);
 
   const fileCount=useMemo(()=>documents.reduce((sum,d)=>sum+(d.attachments?.length||0),0),[documents]);
