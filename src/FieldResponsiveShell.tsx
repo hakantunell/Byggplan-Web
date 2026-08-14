@@ -27,10 +27,15 @@ export function FieldResponsiveShell(){
     if(!projectId)return;
     setLoading(true);setMessage('');
     try{
-      const response=await fetch(`${API_BASE}/api/project-documents?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'});
-      const data=await response.json().catch(()=>({})) as {documents?:ProjectDocument[];error?:string};
-      if(!response.ok)throw new Error(data.error||'Kunde inte läsa projektdokument.');
-      setDocuments(data.documents||[]);
+      const[documentsResponse,categoriesResponse]=await Promise.all([
+        fetch(`${API_BASE}/api/project-documents?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
+        fetch(`${API_BASE}/api/project-document-categories?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
+      ]);
+      const data=await documentsResponse.json().catch(()=>({})) as {documents?:ProjectDocument[];error?:string};
+      if(!documentsResponse.ok)throw new Error(data.error||'Kunde inte läsa projektdokument.');
+      const categoryData=categoriesResponse.ok?await categoriesResponse.json().catch(()=>({})) as {categories?:Array<{id:string;category:string}>}:{};
+      const categoryMap=new Map(('categories' in categoryData?categoryData.categories||[]:[]).map(item=>[item.id,item.category]));
+      setDocuments((data.documents||[]).map(document=>({...document,category:categoryMap.get(document.id)||document.category})));
     }catch(error){setDocuments([]);setMessage(error instanceof Error?error.message:'Kunde inte läsa projektdokument.');}
     finally{setLoading(false);}
   },[projectId]);
