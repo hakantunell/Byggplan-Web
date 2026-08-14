@@ -62,15 +62,16 @@ scan();
 
 // Project hierarchy completion: sections and areas bubble completion upwards.
 // Deprecated activities and tasks with no active activities are ignored.
-let sectionStatusTimer=0;
+let sectionRefreshRunning=false;
 async function refreshSectionStatus(){
+  if(sectionRefreshRunning)return;
   const projectId=(document.querySelector('.projectWorkspace .topbar select') as HTMLSelectElement|null)?.value||'';
-  if(!projectId){sectionStatusTimer=window.setTimeout(refreshSectionStatus,1000);return;}
+  if(!projectId)return;
+  sectionRefreshRunning=true;
   try{
-    const bust=Date.now().toString(36);
     const[taskResponse,metaResponse]=await Promise.all([
-      fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&__section=${bust}`,{cache:'no-store'}),
-      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}&__section=${bust}`,{cache:'no-store'})
+      fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
+      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
     ]);
     const taskData=taskResponse.ok?await taskResponse.json():{tasks:[]};
     const metaData=metaResponse.ok?await metaResponse.json():{items:[]};
@@ -120,8 +121,7 @@ async function refreshSectionStatus(){
         row.classList.toggle('completed',complete);
       }
     }
-  }catch{}
-  sectionStatusTimer=window.setTimeout(refreshSectionStatus,1200);
+  }catch{}finally{sectionRefreshRunning=false}
 }
 window.addEventListener('byggplan:activity-status-changed',()=>void refreshSectionStatus());
 void refreshSectionStatus();
