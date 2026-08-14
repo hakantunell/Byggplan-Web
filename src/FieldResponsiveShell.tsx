@@ -52,11 +52,14 @@ export function FieldResponsiveShell(){
     let cancelled=false;
     if(selection.kind!=='document'||!selectedFile){setObjectUrl(current=>{if(current)URL.revokeObjectURL(current);return''});return;}
     setMessage('');
+    setObjectUrl(current=>{if(current)URL.revokeObjectURL(current);return''});
     void (async()=>{
       try{
-        const response=await fetch(selectedFile.url,{cache:'no-store'});
+        const fileUrl=/^https?:\/\//i.test(selectedFile.url)?selectedFile.url:`${API_BASE}${selectedFile.url.startsWith('/')?'':'/'}${selectedFile.url}`;
+        const response=await fetch(fileUrl,{cache:'no-store'});
         if(!response.ok)throw new Error(`Kunde inte öppna filen (HTTP ${response.status}).`);
         const blob=await response.blob();
+        if(selectedFile.contentType==='application/pdf'&&blob.type.includes('text/html'))throw new Error('PDF-filen kunde inte hämtas. Servern returnerade en webbsida i stället för dokumentet.');
         if(cancelled)return;
         const next=URL.createObjectURL(blob);
         setObjectUrl(current=>{if(current)URL.revokeObjectURL(current);return next});
