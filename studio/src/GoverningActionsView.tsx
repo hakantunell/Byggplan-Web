@@ -29,7 +29,7 @@ export function GoverningActionsView({projectId,onOpenMapping}:{projectId:string
 
   const documentNames=useMemo(()=>new Map(documents.map(d=>[d.id,d.title])),[documents]);
   const rows=useMemo(()=>items.map(item=>({...item,state:itemState(item)})).filter(item=>filter==='all'||(filter==='attention'?item.state==='repair'||item.state==='unmapped':item.state==='handled'||item.state==='condition'||item.state==='exception')),[items,filter]);
-  const repair=items.filter(i=>item.mapping_needs_repair).length;
+  const repair=items.filter(i=>i.mapping_needs_repair).length;
   const unmapped=items.filter(i=>itemState(i)==='unmapped').length;
   const handled=items.length-repair-unmapped;
 
