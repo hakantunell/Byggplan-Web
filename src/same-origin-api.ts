@@ -1,6 +1,8 @@
 const nativeFetch = window.fetch.bind(window);
 
-type ApiTargets = { root: string; sameOrigin: string; original: string } | null;
+const DIRECT_API_ORIGIN = 'https://api.byggplan.tunell.org';
+
+type ApiTargets = { root: string; sameOrigin: string; original: string; directFirst: boolean } | null;
 
 function apiTargets(value: string): ApiTargets {
   try {
@@ -9,6 +11,8 @@ function apiTargets(value: string): ApiTargets {
     const isFieldHost = url.origin === window.location.origin;
     if (!url.pathname.startsWith('/api/') || (!isApiHost && !isFieldHost)) return null;
 
+    const directFirst = /^\/api\/project-document-(annotations(?:\/|$)|annotation-photos(?:\/|$))/.test(url.pathname);
+
     const root = new URL('/', window.location.origin);
     root.searchParams.set('__bp_route', url.pathname);
     url.searchParams.forEach((entryValue, key) => root.searchParams.append(key, entryValue));
@@ -16,7 +20,11 @@ function apiTargets(value: string): ApiTargets {
     const sameOrigin = new URL(url.pathname, window.location.origin);
     sameOrigin.search = url.search;
 
-    return { root: root.toString(), sameOrigin: sameOrigin.toString(), original: url.toString() };
+    const original = directFirst
+      ? (() => { const direct = new URL(url.pathname, DIRECT_API_ORIGIN); direct.search = url.search; return direct.toString(); })()
+      : url.toString();
+
+    return { root: root.toString(), sameOrigin: sameOrigin.toString(), original, directFirst };
   } catch {
     return null;
   }
@@ -29,6 +37,11 @@ function looksLikeHtml(response: Response) {
 async function fetchWithFieldTransport(value: string, init?: RequestInit): Promise<Response> {
   const targets = apiTargets(value);
   if (!targets) return nativeFetch(value, init);
+
+  // Drawing annotations deliberately bypass the Pages transport. The field host currently
+  // serves SPA HTML for /api/* instead of executing Pages Functions, while the API worker
+  // already exposes CORS for byggplan.tunell.org.
+  if (targets.directFirst) return nativeFetch(targets.original, init);
 
   // 1. Studio-style root transport. This is the preferred path on restrictive networks.
   try {
@@ -54,8 +67,11 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const targets = apiTargets(input.url);
   if (!targets) return nativeFetch(input, init);
 
-  // Request bodies are one-shot streams. Clone once for each transport attempt.
   const tryRequest = async (url: string, source: Request) => nativeFetch(new Request(url, source.clone()), init);
+
+  if (targets.directFirst) return tryRequest(targets.original, input);
+
+  // Request bodies are one-shot streams. Clone once for each transport attempt.
   return (async () => {
     try {
       const response = await tryRequest(targets.root, input);
