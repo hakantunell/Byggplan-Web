@@ -1,9 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "byggplan",
+  "name": "byggplan-web",
+  "main": "worker.ts",
   "compatibility_date": "2026-08-05",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   }
 }
