@@ -9,6 +9,8 @@ type AnnotationPhoto={id:string;originalName:string;contentType:string;sizeBytes
 type Annotation={id:string;documentId:string;pageNumber:number;x:number;y:number;createdAt:string;notes:AnnotationNote[];photos:AnnotationPhoto[]};
 type Point={x:number;y:number;pageNumber:number};
 
+const annotationApi=(path:string)=>`/api${path.startsWith('/')?'':'/'}${path}`;
+
 async function apiError(response:Response,fallback:string){
   const text=await response.text().catch(()=>'');
   try{const data=JSON.parse(text) as {error?:string};if(data.error)return data.error}catch{}
@@ -16,7 +18,7 @@ async function apiError(response:Response,fallback:string){
   return `${fallback} (HTTP ${response.status}${compact?`: ${compact}`:''})`;
 }
 
-export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
+export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
   const[annotations,setAnnotations]=useState<Annotation[]>([]);
   const[pageNumber,setPageNumber]=useState(1);
   const[pageCount,setPageCount]=useState(1);
@@ -35,12 +37,12 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
 
   const loadAnnotations=useCallback(async()=>{
     try{
-      const r=await fetch(`${apiBase}/api/project-document-annotations?documentId=${encodeURIComponent(documentId)}`,{cache:'no-store'});
+      const r=await fetch(`${annotationApi('/project-document-annotations')}?documentId=${encodeURIComponent(documentId)}`,{cache:'no-store'});
       if(!r.ok)throw new Error(await apiError(r,'Kunde inte läsa markeringar.'));
       const d=await r.json() as {annotations?:Annotation[]};
       setAnnotations(d.annotations||[]);setLoadError('');
     }catch(error){setLoadError(error instanceof Error?error.message:'Kunde inte läsa markeringar.');}
-  },[apiBase,documentId]);
+  },[documentId]);
 
   useEffect(()=>{setAnnotations([]);setSelected(null);setPending(null);setPageNumber(1);void loadAnnotations()},[documentId,loadAnnotations]);
 
@@ -73,7 +75,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
   const onPointerEnd=()=>{cancelLongPress();pointerStart.current=null};
 
   const createAnnotation=async(point:Point)=>{
-    const r=await fetch(`${apiBase}/api/project-document-annotations`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
+    const r=await fetch(annotationApi('/project-document-annotations'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
     if(!r.ok)throw new Error(await apiError(r,'Markeringen kunde inte skapas.'));
     const d=await r.json().catch(()=>({})) as {id?:string};if(!d.id)throw new Error(`Markeringen kunde inte skapas. API:t svarade HTTP ${r.status} utan id.`);return d.id;
   };
@@ -81,7 +83,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     const note=noteText.trim();if(!note)return;setBusy(true);
     try{
       let annotationId=selected||undefined;if(!annotationId){if(!pending)return;annotationId=await createAnnotation(pending)}
-      const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/notes`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
+      const r=await fetch(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/notes`),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
       setNoteText('');setAddingNote(false);setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Notisen kunde inte sparas.')}finally{setBusy(false)}
   };
@@ -90,7 +92,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     if(!photoTarget)return;setBusy(true);
     try{
       let annotationId=photoTarget.annotationId;if(!annotationId){if(!photoTarget.point)return;annotationId=await createAnnotation(photoTarget.point)}
-      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(`${apiBase}/api/project-document-annotations/${encodeURIComponent(annotationId)}/photos`,{method:'PUT',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
+      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/photos`),{method:'PUT',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
       setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Fotot kunde inte sparas.')}finally{setBusy(false);setPhotoTarget(null)}
   };
@@ -111,7 +113,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl,apiBase}:{do
     <input ref={fileInput} hidden type="file" accept="image/*" capture="environment" onChange={event=>{const selectedFile=event.target.files?.[0];event.target.value='';if(selectedFile)void uploadPhoto(selectedFile);else setPhotoTarget(null)}}/>
     {addingNote&&pending&&<div className="drawingComposer"><b>Notis på ritningen</b><textarea autoFocus value={noteText} onChange={event=>setNoteText(event.target.value)} placeholder="Skriv vad som finns eller har gjorts här…"/><div><button onClick={()=>{setAddingNote(false);setPending(null)}}>Avbryt</button><button disabled={busy||!noteText.trim()} onClick={()=>void saveNote()}>Spara</button></div></div>}
     {selectedAnnotation&&<div className="drawingAnnotationPanel"><div className="drawingAnnotationPanelHead"><div><b>Dokumentation på denna plats</b><small>{selectedAnnotation.photos.length} foto · {selectedAnnotation.notes.length} notis{selectedAnnotation.notes.length===1?'':'er'}</small></div><button onClick={()=>setSelected(null)}>×</button></div>
-      {selectedAnnotation.photos.length>0&&<div className="drawingPhotoGrid">{selectedAnnotation.photos.map(photo=><a key={photo.id} href={`${apiBase}${photo.url}`} target="_blank" rel="noreferrer"><img src={`${apiBase}${photo.url}`} alt={photo.originalName}/></a>)}</div>}
+      {selectedAnnotation.photos.length>0&&<div className="drawingPhotoGrid">{selectedAnnotation.photos.map(photo=><a key={photo.id} href={annotationApi(`/project-document-annotation-photos/${encodeURIComponent(photo.id)}`)} target="_blank" rel="noreferrer"><img src={annotationApi(`/project-document-annotation-photos/${encodeURIComponent(photo.id)}`)} alt={photo.originalName}/></a>)}</div>}
       {selectedAnnotation.notes.map(note=><p className="drawingSavedNote" key={note.id}>{note.note}</p>)}
       {addingNote&&<div className="drawingPanelNote"><textarea autoFocus value={noteText} onChange={event=>setNoteText(event.target.value)} placeholder="Ny notis…"/><button disabled={busy||!noteText.trim()} onClick={()=>void saveNote()}>Spara notis</button></div>}
       <div className="drawingAnnotationPanelActions"><button disabled={busy} onClick={()=>choosePhoto({annotationId:selectedAnnotation.id})}>📷 Lägg till foto</button><button disabled={busy} onClick={()=>{setAddingNote(true);setNoteText('')}}>📝 Lägg till notis</button></div>
