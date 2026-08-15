@@ -18,6 +18,23 @@ async function apiError(response:Response,fallback:string){
   return `${fallback} (HTTP ${response.status}${compact?`: ${compact}`:''})`;
 }
 
+async function runtimeDiagnostic(){
+  try{
+    const r=await fetch(annotationApi('/project-document-annotations-version'),{cache:'no-store'});
+    const text=await r.text().catch(()=>'');
+    return `Runtimekontroll: HTTP ${r.status}${text?` ${text.replace(/\s+/g,' ').trim().slice(0,120)}`:''}`;
+  }catch(error){return `Runtimekontroll misslyckades: ${error instanceof Error?error.message:String(error)}`}
+}
+
+async function requestWithMethodFallback(url:string,init:RequestInit,fallbackLabel:string){
+  const first=await fetch(url,{...init,method:'PUT'});
+  if(first.status!==405)return first;
+  const second=await fetch(url,{...init,method:'POST'});
+  if(second.status!==405)return second;
+  const diagnostic=await runtimeDiagnostic();
+  throw new Error(`${fallbackLabel} (PUT HTTP 405, POST HTTP 405). ${diagnostic}`);
+}
+
 export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
   const[annotations,setAnnotations]=useState<Annotation[]>([]);
   const[pageNumber,setPageNumber]=useState(1);
@@ -75,7 +92,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
   const onPointerEnd=()=>{cancelLongPress();pointerStart.current=null};
 
   const createAnnotation=async(point:Point)=>{
-    const r=await fetch(annotationApi('/project-document-annotations'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})});
+    const r=await requestWithMethodFallback(annotationApi('/project-document-annotations'),{headers:{'Content-Type':'application/json'},body:JSON.stringify({documentId,pageNumber:point.pageNumber,x:point.x,y:point.y})},'Markeringen kunde inte skapas.');
     if(!r.ok)throw new Error(await apiError(r,'Markeringen kunde inte skapas.'));
     const d=await r.json().catch(()=>({})) as {id?:string};if(!d.id)throw new Error(`Markeringen kunde inte skapas. API:t svarade HTTP ${r.status} utan id.`);return d.id;
   };
@@ -83,7 +100,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
     const note=noteText.trim();if(!note)return;setBusy(true);
     try{
       let annotationId=selected||undefined;if(!annotationId){if(!pending)return;annotationId=await createAnnotation(pending)}
-      const r=await fetch(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/notes`),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
+      const r=await requestWithMethodFallback(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/notes`),{headers:{'Content-Type':'application/json'},body:JSON.stringify({note})},'Notisen kunde inte sparas.');if(!r.ok)throw new Error(await apiError(r,'Notisen kunde inte sparas.'));
       setNoteText('');setAddingNote(false);setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Notisen kunde inte sparas.')}finally{setBusy(false)}
   };
@@ -92,7 +109,7 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
     if(!photoTarget)return;setBusy(true);
     try{
       let annotationId=photoTarget.annotationId;if(!annotationId){if(!photoTarget.point)return;annotationId=await createAnnotation(photoTarget.point)}
-      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await fetch(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/photos`),{method:'PUT',body:form});if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
+      const form=new FormData();form.append('file',fileToUpload,fileToUpload.name);const r=await requestWithMethodFallback(annotationApi(`/project-document-annotations/${encodeURIComponent(annotationId)}/photos`),{body:form},'Fotot kunde inte sparas.');if(!r.ok)throw new Error(await apiError(r,'Fotot kunde inte sparas.'));
       setPending(null);setSelected(annotationId);await loadAnnotations();
     }catch(error){alert(error instanceof Error?error.message:'Fotot kunde inte sparas.')}finally{setBusy(false);setPhotoTarget(null)}
   };
