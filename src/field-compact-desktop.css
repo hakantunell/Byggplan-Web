@@ -1,0 +1,40 @@
+/* Kompakt hierarki för Fältappen på platta/dator. Telefonlayouten lämnas orörd. */
+@media (min-width:768px){
+  .fieldResponsiveShell .app main{padding-top:16px}
+  .fieldResponsiveShell .mainHeading{margin-bottom:10px;align-items:center}
+  .fieldResponsiveShell .mainHeading h1{font-size:22px;line-height:1.1}
+  .fieldResponsiveShell .continueBuilding{padding:7px 10px;border-radius:10px}
+
+  .fieldResponsiveShell .workAreas{gap:9px}
+  .fieldResponsiveShell .areaCard{border-radius:13px}
+  .fieldResponsiveShell .areaHeader{padding:12px 14px}
+  .fieldResponsiveShell .areaIcon{width:38px;height:38px;border-radius:10px;font-size:21px;margin-right:10px}
+  .fieldResponsiveShell .areaHeader .headerText{gap:2px}
+  .fieldResponsiveShell .areaHeader .headerText b{font-size:17px;line-height:1.2}
+  .fieldResponsiveShell .areaHeader .headerText small{font-size:11px}
+  .fieldResponsiveShell .areaBody{padding:0 9px 9px}
+
+  .fieldResponsiveShell .sectionCard{margin-top:7px;border-radius:10px}
+  .fieldResponsiveShell .sectionHeader{padding:10px 12px}
+  .fieldResponsiveShell .sectionIcon{width:30px;margin-right:7px;font-size:18px;color:#315f49}
+  .fieldResponsiveShell .sectionHeader .headerText{gap:1px}
+  .fieldResponsiveShell .sectionHeader .headerText b{font-size:15px;line-height:1.2}
+  .fieldResponsiveShell .sectionHeader .headerText small{font-size:11px}
+  .fieldResponsiveShell .sectionBody{padding:7px}
+
+  .fieldResponsiveShell .taskCard{margin-bottom:7px;border-radius:10px}
+  .fieldResponsiveShell .taskHeader{padding:9px 10px;gap:7px}
+  .fieldResponsiveShell .taskHeader::before{content:'🧩';display:grid;place-items:center;width:26px;height:26px;flex:0 0 26px;border-radius:7px;background:#e7f1ea;font-size:15px;line-height:1}
+  .fieldResponsiveShell .taskHeader i{width:10px;height:10px}
+  .fieldResponsiveShell .taskHeader .headerText{gap:1px}
+  .fieldResponsiveShell .taskHeader .headerText b{font-size:14px;line-height:1.25}
+  .fieldResponsiveShell .taskHeader .headerText small{font-size:10px}
+  .fieldResponsiveShell .taskHeader .pill{padding:4px 7px;font-size:9px}
+  .fieldResponsiveShell .areaHeader em,.fieldResponsiveShell .sectionHeader em,.fieldResponsiveShell .taskHeader em{font-size:20px;margin-left:7px}
+}
+
+@media (min-width:1100px){
+  .fieldResponsiveShell .app main{padding:16px 18px 32px;grid-template-columns:400px minmax(0,1fr);column-gap:16px}
+  .fieldResponsiveShell .workAreas{max-width:400px}
+  .fieldResponsiveShell .mainHeading{width:400px}
+}
