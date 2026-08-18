@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './same-origin-api';
 import './mapping-dialog-clarity';
 import { installExecutionContextBridge } from './execution-context-bridge';
+import { installProjectUtilityRail } from './project-utility-rail';
 import { StudioShell } from './StudioShell';
 import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import './styles.css';
@@ -28,6 +29,8 @@ import './governing-import-action.css';
 import './governing-analysis-action.css';
 import './governing-workspace-nav.css';
 import './governing-mapping-rail.css';
+import './project-utility-rail.css';
 
 installExecutionContextBridge();
+installProjectUtilityRail();
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><StudioShell/><MasterV2UpgradeAction/></React.StrictMode>);
