@@ -18,6 +18,7 @@ import './support-attachments.css';
 import './project-documents-bar.css';
 import './field-responsive-shell.css';
 import './field-task-detail.css';
+import './field-compact-desktop.css';
 
 installDemoFetchIdentity();
 installProjectSupportBridge();
