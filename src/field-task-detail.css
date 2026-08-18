@@ -1,0 +1,57 @@
+/* Fältappens momentvisning på större skärmar.
+   Telefonflödet lämnas orört. Den gamla generella desktopregeln i styles.css
+   gör taskBody till ett flytande fixed-kort; här neutraliseras den i Fältappen. */
+
+@media (min-width: 768px) and (max-width: 1099px) {
+  .fieldResponsiveShell .areaCard.open .taskBody {
+    position: static;
+    inset: auto;
+    overflow: visible;
+    border: 0;
+    border-top: 1px solid #e5ebe7;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: auto;
+    background: #fff;
+  }
+}
+
+@media (min-width: 1100px) {
+  .fieldResponsiveShell .fieldActivitiesPane {
+    position: relative;
+  }
+
+  .fieldResponsiveShell .app main {
+    max-width: none;
+    margin: 0;
+    padding: 26px 24px 40px;
+    grid-template-columns: 420px minmax(0, 1fr);
+    column-gap: 20px;
+  }
+
+  .fieldResponsiveShell .workAreas {
+    max-width: 420px;
+  }
+
+  .fieldResponsiveShell .areaCard.open .taskBody {
+    position: fixed;
+    top: 76px;
+    left: 720px;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+    border: 0;
+    border-left: 1px solid #d7dfda;
+    border-radius: 0;
+    box-shadow: none;
+    background: #eef2ef;
+    padding: 24px 28px 48px;
+    z-index: 4;
+  }
+
+  .fieldResponsiveShell .areaCard.open .taskBody > * {
+    max-width: 920px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
