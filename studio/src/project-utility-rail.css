@@ -1,1 +1,3 @@
 .rail .projectUtilityRailButton{order:20}.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px;line-height:1}.projectWorkspace>.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px!important}.rail .projectUtilityRailButton.active{background:#30443a;color:#fff}.projectWorkspace>.rail .projectUtilityRailButton.active{background:#273741;color:#fff}
+.projectWorkspace.projectUtilityView{grid-template-columns:68px minmax(0,1fr)}.projectWorkspace.projectUtilityView>.projectNav{display:none}.projectWorkspace.projectUtilityView>.projectMain{grid-column:2}.projectWorkspace.projectUtilityView>.topbar{grid-column:1/-1}
+@media(max-width:1050px){.projectWorkspace.projectUtilityView{grid-template-columns:60px minmax(0,1fr)}}
