@@ -17,9 +17,12 @@ function hideNativeUtilityRows(){
 
 function syncActive(){
   const activeLabel=projectRows().find(row=>row.classList.contains('selected'))?.querySelector('.projectTreeLabel')?.textContent?.trim()||'';
+  const utilityActive=utilityItems.some(item=>item.label===activeLabel);
   for(const button of Array.from(document.querySelectorAll<HTMLButtonElement>('.rail .projectUtilityRailButton'))){
     button.classList.toggle('active',button.dataset.utilityLabel===activeLabel);
   }
+  const workspace=document.querySelector<HTMLElement>('.projectWorkspace');
+  workspace?.classList.toggle('projectUtilityView',utilityActive);
 }
 
 function openUtility(label:UtilityLabel,attempt=0){
