@@ -32,6 +32,7 @@ import './governing-analysis-action.css';
 import './governing-workspace-nav.css';
 import './governing-mapping-rail.css';
 import './project-utility-rail.css';
+import './ka-project-information.css';
 
 installExecutionContextBridge();
 installProjectUtilityRail();
