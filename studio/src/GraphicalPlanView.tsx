@@ -12,7 +12,7 @@ type PlanNode={task:Task;area:Area;section:Section;activities:Activity[];stop:bo
 
 const EMPTY:Structure={areas:[],sections:[],tasks:[],activities:[]};
 const STOP_WORDS=/kontroll|besikt|inspektion|godkänn|startbesked|slutbesked|samråd|utsättning|lägeskontroll|provtryck/i;
-const STORAGE_PREFIX='byggplan.graph.dependencies.v4.';
+const STORAGE_PREFIX='byggplan.graph.dependencies.v5.';
 
 function order<T extends {sort_order?:number;name?:string;title?:string}>(items:T[]){
  return [...items].sort((a,b)=>(a.sort_order??999999)-(b.sort_order??999999)||String(a.name||a.title||'').localeCompare(String(b.name||b.title||''),'sv'));
@@ -58,9 +58,13 @@ function structuralDependencies(structure:Structure):DependencyMap{
 }
 function suggestedDependencies(structure:Structure):DependencyMap{
  const sorted=order(structure.tasks);
- const result=structuralDependencies(structure);
+ const structural=structuralDependencies(structure);
+ const result:DependencyMap={...structural};
  const find=(re:RegExp)=>sorted.filter(t=>re.test(text(t,structure)));
- const setParents=(children:Task[],parents:Task[])=>{for(const child of children)result[child.id]=unique(parents.filter(p=>p.id!==child.id).map(p=>p.id));};
+ const setParents=(children:Task[],parents:Task[])=>{
+  if(!parents.length)return;
+  for(const child of children)result[child.id]=unique(parents.filter(p=>p.id!==child.id).map(p=>p.id));
+ };
  const first=(re:RegExp)=>find(re);
 
  const start=first(/starta byggarbetsplats|startbesked|byggstart/);
@@ -76,9 +80,10 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const botten=first(/bottenbjälklag|syll|bärlina/);
  const yttervagg=first(/yttervägg|timr|timmerstomme|bygg stomme/);
  const invBar=first(/invändigt bärverk|mellanbjälklag|loft/);
- const takstom=first(/takstomme|takbärverk|takstol|bärande tak|bygg bärande tak/);
+ const takstom=first(/takstomme|takbärverk|takstol|bärande tak|bygg bärande tak|åstak/);
  const undertak=first(/undertak|råspont|underlagstäck/);
  const yttertak=first(/yttertak|takplåt|klicktak/);
+ const taksakerhet=first(/taksäkerhet|snörasskydd|takstege/);
  const fonster=first(/fönster|ytterdörr/);
  const fasad=first(/färdigställ fasad|fasad och yttre|yttre väggskikt/);
  const klimatskal=first(/isolera och lufttäta|isolering och lufttäthet|ångbroms|klimatskal/);
@@ -112,7 +117,7 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const slutdocs=first(/samla slutdokumentation/);
  const slutbesked=first(/förbered och avsluta slutbesked|slutbesked/);
 
- setParents(start,[]);
+ for(const task of start)result[task.id]=[];
  const startParents=start;
  setParents(prepareMark,startParents);
  setParents(grov,startParents);
@@ -131,6 +136,7 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(takstom,combineTasks(yttervagg,invBar));
  setParents(undertak,takstom);
  setParents(yttertak,undertak.length?undertak:takstom);
+ setParents(taksakerhet,yttertak.length?yttertak:(undertak.length?undertak:takstom));
  setParents(fonster,yttervagg.length?yttervagg:botten);
  setParents(fasad,combineTasks(fonster,yttervagg));
  setParents(klimatskal,combineTasks(yttertak,fonster));
@@ -169,11 +175,19 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(outsideMark,combineTasks(aterfyll,yttertak));
  const installed=combineTasks(vvsInstall,elHidden,ventilation,heating,fireplace,outsideVa);
  setParents(commission,installed.length?installed:weatherTight);
- const finished=combineTasks(commission,wetFinish,innerFinish,fixedInterior,stairs,fasad,outsideMark);
+ const finished=combineTasks(commission,wetFinish,innerFinish,fixedInterior,stairs,fasad,outsideMark,taksakerhet);
  setParents(finalBuilding,finished.length?finished:commission);
  setParents(slutdocs,finalBuilding.length?finalBuilding:finished);
  setParents(slutbesked,slutdocs.length?slutdocs:finalBuilding);
 
+ const rootIds=new Set(start.map(t=>t.id));
+ const fallbackRoot=start[0];
+ for(const task of sorted){
+  if(rootIds.has(task.id))continue;
+  if((result[task.id]||[]).length)continue;
+  const fallback=(structural[task.id]||[]).filter(id=>id!==task.id);
+  result[task.id]=fallback.length?fallback:(fallbackRoot&&fallbackRoot.id!==task.id?[fallbackRoot.id]:[]);
+ }
  return result;
 }
 function stageFor(id:string,deps:DependencyMap,memo:Map<string,number>,trail:Set<string>):number{
