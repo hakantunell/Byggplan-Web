@@ -68,6 +68,20 @@ body{overflow-x:hidden}
   overflow:hidden;
 }
 
+/* ControlPlanReviewView is rendered directly in this region. It does not use
+   .controlPlanContent, so the region itself must own the vertical scroll. */
+.studioShell.view-native-control-plan .controlPlanMainRegion{
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.studioShell.view-native-control-plan .controlPlanReview{
+  box-sizing:border-box;
+  min-height:100%;
+  padding:24px 28px 70px;
+}
+
 .controlPlanPrimaryView{
   height:100%;
   min-width:0;
@@ -128,6 +142,7 @@ body{overflow-x:hidden}
   .controlPlanPrimaryView{grid-template-columns:1fr}
   .controlPlanListPanel{display:none}
   .controlPlanContent{padding:18px 14px 60px}
+  .studioShell.view-native-control-plan .controlPlanReview{padding:18px 14px 60px}
   .controlPlanPageHeader{align-items:flex-start}
   .controlPlanPageHeader h1{font-size:22px}
 }
