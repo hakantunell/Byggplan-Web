@@ -4,7 +4,7 @@ import './same-origin-api';
 import './mapping-dialog-clarity';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { installProjectUtilityRail } from './project-utility-rail';
-import { StudioShell } from './StudioShell';
+import { StudioRoot } from './StudioRoot';
 import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import { ProjectInformationMount } from './ProjectInformationMount';
 import { AuthGate } from './AuthGate';
@@ -35,4 +35,4 @@ import './project-utility-rail.css';
 
 installExecutionContextBridge();
 installProjectUtilityRail();
-ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioShell/><ProjectInformationMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioRoot/><ProjectInformationMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
