@@ -22,6 +22,7 @@ function readDependencies(projectId:string):DependencyMap{try{return JSON.parse(
 function writeDependencies(projectId:string,value:DependencyMap){try{localStorage.setItem(`${STORAGE_PREFIX}${projectId}`,JSON.stringify(value))}catch{}}
 function text(task:Task,structure:Structure){const section=structure.sections.find(s=>s.id===task.work_section_id);const area=structure.areas.find(a=>a.id===section?.work_area_id);return `${area?.name||''} ${section?.name||''} ${task.title}`.toLowerCase()}
 function add(result:DependencyMap,children:Task[],parents:Task[]){if(!parents.length)return;for(const child of children)result[child.id]=unique([...(result[child.id]||[]),...parents.filter(parent=>parent.id!==child.id).map(parent=>parent.id)])}
+function combineTasks(...groups:Task[][]){const flat=groups.flat();return unique(flat.map(t=>t.id)).map(id=>flat.find(t=>t.id===id)!).filter(Boolean)}
 function suggestedDependencies(structure:Structure):DependencyMap{
  const sorted=order(structure.tasks);const result:DependencyMap={};const find=(re:RegExp)=>sorted.filter(t=>re.test(text(t,structure)));
  const start=find(/starta byggarbetsplats|startbesked|byggstart/);
@@ -56,29 +57,27 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  for(const task of allSchakt)if(!schaktGrund.some(x=>x.id===task.id)&&!schaktVa.some(x=>x.id===task.id))add(result,[task],earthParents);
  add(result,undergrund,schaktGrund.length?schaktGrund:allSchakt);
  add(result,fin,schaktGrund.length?schaktGrund:allSchakt);add(result,lage,fin.length?fin:(schaktGrund.length?schaktGrund:allSchakt));
- const groundParents=unique([...(undergrund.length?undergrund:[]),...(lage.length?lage:[])]).map(id=>sorted.find(t=>t.id===id)!).filter(Boolean);
+ const groundParents=combineTasks(undergrund,lage);
  add(result,grund,groundParents.length?groundParents:(schaktGrund.length?schaktGrund:allSchakt));
  add(result,aterfyll,grund);
  add(result,botten,grund);
  add(result,yttervagg,botten.length?botten:grund);
- add(result,invBar,yttterSafe(yttterUnique(ytttervagg,botten,grund)));
- add(result,takstom,yttterSafe(yttterUnique(ytttervagg,invBar,botten)));
+ add(result,invBar,combineTasks(yttervagg,botten,grund));
+ add(result,takstom,combineTasks(yttervagg,invBar,botten));
  add(result,undertak,takstom);add(result,yttertak,undertak.length?undertak:takstom);
- add(result,fonster,yttterSafe(yttterUnique(ytttervagg,botten)));
- add(result,fasad,yttterSafe(yttterUnique(fonster,ytttervagg)));
- add(result,klimatskal,yttterSafe(yttterUnique(ytttertak,fonster,ytttervagg)));
- const installParents=yttterSafe(yttterUnique(ytttertak,fonster,ytttervagg));
+ add(result,fonster,combineTasks(yttervagg,botten));
+ add(result,fasad,combineTasks(fonster,yttervagg));
+ add(result,klimatskal,combineTasks(yttertak,fonster,yttervagg));
+ const installParents=combineTasks(yttertak,fonster,yttervagg);
  add(result,installation,installParents);
  add(result,vatrum,installation.length?installation:installParents);
  add(result,invandigt,installation.length?installation:installParents);
- const finishParents=yttterSafe(yttterUnique(vatrum,invandigt,installation,fasad,aterfyll));
+ const finishParents=combineTasks(vatrum,invandigt,installation,fasad,aterfyll);
  add(result,kontroll,finishParents);
  add(result,slutdocs,kontroll.length?kontroll:finishParents);
  add(result,slutbesked,slutdocs.length?slutdocs:(kontroll.length?kontroll:finishParents));
  return result;
 }
-function yttterUnique(...groups:Task[][]){return unique(groups.flat().map(t=>t.id)).map(id=>groups.flat().find(t=>t.id===id)!).filter(Boolean)}
-function yttterSafe(tasks:Task[]){return tasks.filter(Boolean)}
 function stageFor(id:string,deps:DependencyMap,memo:Map<string,number>,trail:Set<string>):number{if(memo.has(id))return memo.get(id)!;if(trail.has(id))return 0;const nextTrail=new Set(trail).add(id);const req=deps[id]||[];const stage=req.length?1+Math.max(...req.map(parent=>stageFor(parent,deps,memo,nextTrail))):0;memo.set(id,stage);return stage}
 
 export function GraphicalPlanView({projectId,projectName}:Props){
