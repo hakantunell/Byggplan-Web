@@ -1,0 +1,5 @@
+.view-ka-project-information .controlPlanMainRegion{overflow:auto}
+.view-ka-project-information .projectPage{max-width:1180px;margin:0 auto;padding:28px}
+.kaReadOnlyValue,.kaReadOnlyText{margin-top:6px;border:1px solid #d0d5dd;border-radius:8px;background:#f8fafc;color:#1d2939;min-height:42px;padding:10px 12px;line-height:1.35}
+.kaReadOnlyText{min-height:76px;white-space:pre-wrap}
+.view-ka .kaRail button{min-height:62px}
