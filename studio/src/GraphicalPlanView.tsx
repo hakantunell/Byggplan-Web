@@ -12,7 +12,7 @@ type DependencyMap=Record<string,string[]>;
 
 const EMPTY:Structure={areas:[],sections:[],tasks:[],activities:[]};
 const STOP_WORDS=/kontroll|besikt|inspektion|godkänn|startbesked|slutbesked|samråd|utsättning|lägeskontroll|provtryck/i;
-const STORAGE_PREFIX='byggplan.graph.dependencies.v2.';
+const STORAGE_PREFIX='byggplan.graph.dependencies.v3.';
 
 function order<T extends {sort_order?:number;name?:string;title?:string}>(items:T[]){return [...items].sort((a,b)=>(a.sort_order??999999)-(b.sort_order??999999)||String(a.name||a.title||'').localeCompare(String(b.name||b.title||''),'sv'))}
 function rawStatus(task:Task){const value=String(task.status||'').toLowerCase();if(['done','completed','complete','closed','klar','finished'].includes(value))return'done' as const;if(['active','in_progress','in-progress','started','pågår','ongoing'].includes(value))return'active' as const;return'planned' as const}
@@ -38,7 +38,7 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const botten=find(/bottenbjälklag|syll|bärlina/);
  const yttervagg=find(/yttervägg|timr|timmerstomme|bygg stomme/);
  const invBar=find(/invändigt bärverk|mellanbjälklag|loft/);
- const takstom=find(/takstomme|takbärverk|takstol/);
+ const takstom=find(/takstomme|takbärverk|takstol|bärande tak|bygg bärande tak/);
  const undertak=find(/undertak|råspont|underlagstäck/);
  const yttertak=find(/yttertak|takplåt|klicktak/);
  const fonster=find(/fönster|ytterdörr/);
