@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './same-origin-api';
 import './mapping-dialog-clarity';
+import './graph-wheel-guard';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { installProjectUtilityRail } from './project-utility-rail';
 import { StudioShell } from './StudioShell';
