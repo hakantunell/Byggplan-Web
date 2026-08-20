@@ -261,6 +261,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
  const[editDeps,setEditDeps]=useState(false);
  const[offsets,setOffsets]=useState<OffsetMap>({});
  const[routes,setRoutes]=useState<RouteMap>({});
+ const[hoveredEdge,setHoveredEdge]=useState('');
  const dragRef=useRef<DragState|null>(null);
 
  useEffect(()=>{
@@ -279,7 +280,10 @@ export function GraphicalPlanView({projectId,projectName}:Props){
    const drag=dragRef.current;if(!drag)return;
    dragRef.current=null;
    if(drag.kind==='node')setOffsets(current=>{writeOffsets(projectId,current);return current;});
-   else setRoutes(current=>{writeRoutes(projectId,current);return current;});
+   else{
+    setHoveredEdge('');
+    setRoutes(current=>{writeRoutes(projectId,current);return current;});
+   }
   };
   window.addEventListener('pointermove',move);
   window.addEventListener('pointerup',up);
@@ -397,8 +401,8 @@ export function GraphicalPlanView({projectId,projectName}:Props){
    const offset=offsets[node.task.id]||{dx:0,dy:0};
    const pos={x:Math.max(20,base.x+offset.dx),y:Math.max(20,base.y+offset.dy)};
    map.set(node.task.id,pos);
-   width=Math.max(width,pos.x+NODE_W+120);
-   height=Math.max(height,pos.y+NODE_H+120);
+   width=Math.max(width,pos.x+NODE_W+150);
+   height=Math.max(height,pos.y+NODE_H+150);
   }
   return{map,width,height};
  },[allNodes,autoPositions,offsets]);
@@ -416,7 +420,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
 
  function edgeGeometry(parentId:string,childId:string){
   const from=positions.map.get(parentId),to=positions.map.get(childId);
-  if(!from||!to||to.x<=from.x)return null;
+  if(!from||!to)return null;
   const outgoing=edgeMeta.outgoing.get(parentId)||[childId];
   const incoming=edgeMeta.incoming.get(childId)||[parentId];
   const outOffsets=spreadOffsets(outgoing.length,11);
@@ -427,22 +431,37 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   const y2=to.y+NODE_H/2+inOffsets[inIndex];
   const x1=from.x+NODE_W;
   const x2=to.x;
-  const gap=x2-x1;
-  const laneBase=x1+Math.min(110,Math.max(42,gap*.42));
-  const siblingBias=(outIndex-(outgoing.length-1)/2)*10+(inIndex-(incoming.length-1)/2)*7;
-  const lane=Math.min(x2-34,Math.max(x1+34,laneBase+siblingBias));
   const key=`${parentId}->${childId}`;
   const custom=routes[key];
-  if(!custom){
-   const points=[{x:x1,y:y1},{x:lane,y:y1},{x:lane,y:y2},{x:x2,y:y2}];
-   return{key,path:roundedPath(points),handle:{x:lane,y:(y1+y2)/2},custom:false};
+  const siblingBias=(outIndex-(outgoing.length-1)/2)*10+(inIndex-(incoming.length-1)/2)*7;
+  const forwardGap=x2-x1;
+
+  if(forwardGap>=78){
+   const laneBase=x1+Math.min(110,Math.max(42,forwardGap*.42));
+   const lane=Math.min(x2-34,Math.max(x1+34,laneBase+siblingBias));
+   if(!custom){
+    const points=[{x:x1,y:y1},{x:lane,y:y1},{x:lane,y:y2},{x:x2,y:y2}];
+    return{key,path:roundedPath(points),handle:{x:lane,y:(y1+y2)/2},custom:false};
+   }
+   const baseY=(y1+y2)/2;
+   const controlX=Math.min(x2-58,Math.max(x1+34,lane+custom.dx));
+   const controlY=Math.max(16,baseY+custom.dy);
+   const exitX=Math.max(controlX+26,x2-32);
+   const points=[{x:x1,y:y1},{x:controlX,y:y1},{x:controlX,y:controlY},{x:exitX,y:controlY},{x:exitX,y:y2},{x:x2,y:y2}];
+   return{key,path:roundedPath(points),handle:{x:(controlX+exitX)/2,y:controlY},custom:true};
   }
-  const baseY=(y1+y2)/2;
-  const controlX=Math.min(x2-58,Math.max(x1+34,lane+custom.dx));
-  const controlY=Math.max(16,baseY+custom.dy);
-  const exitX=Math.max(controlX+26,x2-32);
-  const points=[{x:x1,y:y1},{x:controlX,y:y1},{x:controlX,y:controlY},{x:exitX,y:controlY},{x:exitX,y:y2},{x:x2,y:y2}];
-  return{key,path:roundedPath(points),handle:{x:controlX,y:controlY},custom:true};
+
+  const sourceRight=from.x+NODE_W;
+  const targetRight=to.x+NODE_W;
+  const autoRight=Math.max(sourceRight,targetRight)+54+Math.max(0,siblingBias);
+  const autoLeft=Math.max(10,Math.min(from.x,to.x)-54-Math.min(0,siblingBias));
+  const down=y2>=y1;
+  const autoBridgeY=down?Math.max(from.y+NODE_H,to.y+NODE_H)+48:Math.max(14,Math.min(from.y,to.y)-48);
+  const rightLane=Math.max(sourceRight+32,autoRight+(custom?.dx??0));
+  const bridgeY=Math.max(14,autoBridgeY+(custom?.dy??0));
+  const leftLane=autoLeft;
+  const points=[{x:x1,y:y1},{x:rightLane,y:y1},{x:rightLane,y:bridgeY},{x:leftLane,y:bridgeY},{x:leftLane,y:y2},{x:x2,y:y2}];
+  return{key,path:roundedPath(points,11),handle:{x:(rightLane+leftLane)/2,y:bridgeY},custom:!!custom};
  }
 
  if(loading)return <div className="graphPlanState">Hämtar grafisk plan…</div>;
@@ -451,7 +470,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   <header className="graphPlanHeader"><div><small>GRAFISK PLAN</small><h1>{projectName||'Projektplan'}</h1><p>Dra boxarna för att flytta dem. Dra direkt i en linje för att lägga dess väg runt andra linjer och boxar.</p></div><div className="graphPlanHeaderActions"><div className="graphPlanSummary"><span><b>{done}</b> klara</span><span><b>{ready}</b> kan göras nu</span><span><b>{stops}</b> stoppunkter</span></div><div className="graphPlanButtons"><button className={editDeps?'active':''} onClick={()=>setEditDeps(v=>!v)}>↔ {editDeps?'Klar med beroenden':'Redigera beroenden'}</button><button onClick={resetPositions}>Återställ boxar</button><button onClick={resetRoutes}>Återställ linjer</button></div></div></header>
   <div className="graphLegend"><span><i className="legendDot done">✓</i>Klar</span><span><i className="legendDot active"/>Pågår</span><span><i className="legendDot ready"/>Kan göras nu</span><span><i className="legendDot blocked">🔒</i>Blockerad</span><span><i className="legendDot stop"/>Stoppunkt</span></div>
   {allNodes.length===0?<div className="graphPlanEmpty"><b>Planen är tom</b><span>Lägg först in moment i projektstrukturen.</span></div>:<div className="graphPlanLayout">
-   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height}><defs><marker id="dependencyArrow" markerWidth="4.5" markerHeight="4.5" refX="4" refY="2.25" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4,2.25 L0,4.5 z" className="dependencyArrowHead"/></marker><marker id="dependencyArrowRelated" markerWidth="4.5" markerHeight="4.5" refX="4" refY="2.25" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4,2.25 L0,4.5 z" className="dependencyArrowHead related"/></marker></defs>{allNodes.flatMap(node=>node.requires.flatMap(parentId=>{const geometry=edgeGeometry(parentId,node.task.id);if(!geometry)return[];const related=!!selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);const route=routes[geometry.key]||{dx:0,dy:0};const startEdgeDrag=(e:React.PointerEvent<SVGElement>)=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();setSelected(node.task.id);dragRef.current={kind:'edge',key:geometry.key,startX:e.clientX,startY:e.clientY,dx:route.dx,dy:route.dy};};return [<path key={`${geometry.key}-visible`} d={geometry.path} markerEnd={related?'url(#dependencyArrowRelated)':'url(#dependencyArrow)'} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>,<path key={`${geometry.key}-hit`} d={geometry.path} className="dependencyEdgeHit" onPointerDown={startEdgeDrag}/>,...(related||geometry.custom?[<circle key={`${geometry.key}-handle`} cx={geometry.handle.x} cy={geometry.handle.y} r="5" className={`dependencyRouteHandle ${related?'related':''}`} onPointerDown={startEdgeDrag}/>]:[])];}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;const off=offsets[node.task.id]||{dx:0,dy:0};return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode draggable ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onPointerDown={e=>{if(e.button!==0)return;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);dragRef.current={kind:'node',id:node.task.id,startX:e.clientX,startY:e.clientY,dx:off.dx,dy:off.dy};}} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
+   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height}><defs><marker id="dependencyArrow" markerWidth="4.5" markerHeight="4.5" refX="4" refY="2.25" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4,2.25 L0,4.5 z" className="dependencyArrowHead"/></marker><marker id="dependencyArrowRelated" markerWidth="4.5" markerHeight="4.5" refX="4" refY="2.25" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4,2.25 L0,4.5 z" className="dependencyArrowHead related"/></marker></defs>{allNodes.flatMap(node=>node.requires.flatMap(parentId=>{const geometry=edgeGeometry(parentId,node.task.id);if(!geometry)return[];const related=!!selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);const route=routes[geometry.key]||{dx:0,dy:0};const startEdgeDrag=(e:React.PointerEvent<SVGElement>)=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();setSelected(node.task.id);setHoveredEdge(geometry.key);dragRef.current={kind:'edge',key:geometry.key,startX:e.clientX,startY:e.clientY,dx:route.dx,dy:route.dy};};return [<path key={`${geometry.key}-visible`} d={geometry.path} markerEnd={related?'url(#dependencyArrowRelated)':'url(#dependencyArrow)'} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>,<path key={`${geometry.key}-hit`} d={geometry.path} className="dependencyEdgeHit" onPointerEnter={()=>setHoveredEdge(geometry.key)} onPointerLeave={()=>{if(!dragRef.current)setHoveredEdge('');}} onPointerDown={startEdgeDrag}/>,...(hoveredEdge===geometry.key?[<circle key={`${geometry.key}-handle`} cx={geometry.handle.x} cy={geometry.handle.y} r="5" className={`dependencyRouteHandle ${related?'related':''}`} onPointerDown={startEdgeDrag}/>]:[])];}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;const off=offsets[node.task.id]||{dx:0,dy:0};return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode draggable ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onPointerDown={e=>{if(e.button!==0)return;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);dragRef.current={kind:'node',id:node.task.id,startX:e.clientX,startY:e.clientY,dx:off.dx,dy:off.dy};}} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
    {selectedNode&&<aside className="graphInspector"><div className="graphInspectorTop"><span className={`graphInspectorNode ${selectedNode.stop?'stop':''} ${selectedNode.status}`}>{selectedNode.status==='done'?'✓':selectedNode.status==='blocked'?'×':selectedNode.stop?'!':''}</span><div><small>{selectedNode.stop?'STOPPUNKT':'MOMENT'}</small><h2>{selectedNode.task.title}</h2><p>{selectedNode.status==='done'?'Klar':selectedNode.status==='active'?'Pågår':selectedNode.status==='ready'?'Kan göras nu':selectedNode.status==='blocked'?'Blockerad':'Planerad'}</p></div></div><dl><div><dt>Arbetsområde</dt><dd>{selectedNode.area.name}</dd></div><div><dt>Arbetsavsnitt</dt><dd>{selectedNode.section.name}</dd></div><div><dt>Aktiviteter</dt><dd>{selectedNode.activities.length}</dd></div></dl><div className="graphDependencies"><div className="graphDependenciesHeader"><small>MÅSTE VARA KLART FÖRST</small>{editDeps&&<button onClick={resetSuggestions}>Återställ grundordning</button>}</div>{editDeps?<div className="dependencyEditor">{allNodes.filter(n=>n.task.id!==selectedNode.task.id).map(candidate=>{const checked=selectedNode.requires.includes(candidate.task.id);const cyclic=!checked&&wouldCreateCycle(dependencies,selectedNode.task.id,candidate.task.id);return <label key={candidate.task.id} className={cyclic?'disabled':''}><input type="checkbox" disabled={cyclic} checked={checked} onChange={()=>toggleDependency(selectedNode.task.id,candidate.task.id)}/><span>{candidate.task.title}</span><small>{cyclic?'Skulle skapa cirkulärt beroende':candidate.section.name}</small></label>;})}</div>:selectedNode.requires.length?<div className="dependencyList">{selectedNode.requires.map(id=>{const required=allNodes.find(n=>n.task.id===id);return required?<div key={id}><span className={`dependencyState ${required.status}`}>{required.status==='done'?'✓':'•'}</span><b>{required.task.title}</b><small>{required.status==='done'?'Klar':'Inte klar'}</small></div>:null;})}</div>:<p className="noDependencies">Detta är ett rotmoment i planen.</p>}</div>{selectedNode.task.description&&<div className="graphDescription"><small>BESKRIVNING</small><p>{selectedNode.task.description}</p></div>}{selectedNode.activities.length>0&&<div className="graphActivities"><small>AKTIVITETER I MOMENTET</small>{selectedNode.activities.map(a=><div key={a.id}><span>{['approval','control','check','measurement'].includes(a.activity_type)?'◆':'○'}</span><b>{a.title}</b></div>)}</div>}</aside>}
   </div>}
  </div>;
