@@ -9,10 +9,15 @@ type Props={projectId:string;projectName?:string};
 type PlanStatus='done'|'active'|'ready'|'blocked'|'planned';
 type DependencyMap=Record<string,string[]>;
 type PlanNode={task:Task;area:Area;section:Section;activities:Activity[];stop:boolean;status:PlanStatus;requires:string[];stage:number};
+type Position={x:number;y:number};
 
 const EMPTY:Structure={areas:[],sections:[],tasks:[],activities:[]};
 const STOP_WORDS=/kontroll|besikt|inspektion|godkänn|startbesked|slutbesked|samråd|utsättning|lägeskontroll|provtryck/i;
 const STORAGE_PREFIX='byggplan.graph.dependencies.v5.';
+const NODE_W=190;
+const NODE_H=82;
+const X_GAP=248;
+const Y_GAP=118;
 
 function order<T extends {sort_order?:number;name?:string;title?:string}>(items:T[]){
  return [...items].sort((a,b)=>(a.sort_order??999999)-(b.sort_order??999999)||String(a.name||a.title||'').localeCompare(String(b.name||b.title||''),'sv'));
@@ -98,7 +103,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const releaseFloor=first(/frigör golv för igenbyggnad/);
  const releaseWalls=first(/frigör väggar för igenbyggnad/);
  const releaseCeiling=first(/frigör innertak för igenbyggnad/);
-
  const floor=first(/färdigställ golvkonstruktion/);
  const innerWalls=first(/bygg innerväggar/);
  const innerCeiling=first(/montera innertak/);
@@ -109,7 +113,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const innerFinish=first(/färdigställ invändiga ytskikt/);
  const fixedInterior=first(/montera fast inredning/);
  const stairs=first(/montera trappor och skydd/);
-
  const outsideVa=first(/färdigställ utvändigt va/);
  const outsideMark=first(/färdigställ dagvatten och mark/);
  const commission=first(/prova och driftsätt installationer/);
@@ -118,9 +121,8 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const slutbesked=first(/förbered och avsluta slutbesked|slutbesked/);
 
  for(const task of start)result[task.id]=[];
- const startParents=start;
- setParents(prepareMark,startParents);
- setParents(grov,startParents);
+ setParents(prepareMark,start);
+ setParents(grov,start);
  const earthRoot=combineTasks(prepareMark,grov.length?grov:start);
  setParents(schaktGrund,earthRoot.length?earthRoot:start);
  setParents(schaktVa,earthRoot.length?earthRoot:start);
@@ -170,7 +172,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(innerFinish,constructionClosed.length?constructionClosed:weatherTight);
  setParents(fixedInterior,combineTasks(innerFinish,vvsInstall,elHidden));
  setParents(stairs,innerFinish.length?innerFinish:(invBar.length?invBar:yttervagg));
-
  setParents(outsideVa,schaktVa.length?schaktVa:(schaktGrund.length?schaktGrund:earthRoot));
  setParents(outsideMark,combineTasks(aterfyll,yttertak));
  const installed=combineTasks(vvsInstall,elHidden,ventilation,heating,fireplace,outsideVa);
@@ -197,6 +198,11 @@ function stageFor(id:string,deps:DependencyMap,memo:Map<string,number>,trail:Set
  const stage=req.length?1+Math.max(...req.map(parent=>stageFor(parent,deps,memo,new Set(trail).add(id)))):0;
  memo.set(id,stage);
  return stage;
+}
+function spreadOffsets(count:number,step=12){
+ if(count<=1)return[0];
+ const start=-((count-1)*step)/2;
+ return Array.from({length:count},(_,i)=>start+i*step);
 }
 
 export function GraphicalPlanView({projectId,projectName}:Props){
@@ -234,27 +240,27 @@ export function GraphicalPlanView({projectId,projectName}:Props){
  }
  function resetSuggestions(){saveDeps(suggestedDependencies(structure));}
 
- const baseNodes=useMemo(()=>order(structure.tasks).map(task=>{
+ const validNodes=useMemo(()=>order(structure.tasks).map(task=>{
   const section=structure.sections.find(s=>s.id===task.work_section_id);
   const area=structure.areas.find(a=>a.id===section?.work_area_id);
   if(!section||!area)return null;
   const activities=order(structure.activities.filter(a=>a.task_id===task.id));
   return{task,area,section,activities,stop:isStop(task,activities)};
- }),[structure]);
- const validNodes=useMemo(()=>baseNodes.filter(Boolean) as Array<Omit<PlanNode,'status'|'requires'|'stage'>>,[baseNodes]);
+ }).filter(Boolean) as Array<Omit<PlanNode,'status'|'requires'|'stage'>>,[structure]);
+
  const allNodes=useMemo(()=>{
   const ids=new Set(validNodes.map(n=>n.task.id));
   const clean:DependencyMap={};
   for(const node of validNodes)clean[node.task.id]=unique((dependencies[node.task.id]||[]).filter(id=>ids.has(id)&&id!==node.task.id));
   const doneIds=new Set(validNodes.filter(n=>rawStatus(n.task)==='done').map(n=>n.task.id));
-  const rootIds=new Set(validNodes.filter(n=>/starta byggarbetsplats|startbesked|byggstart/i.test(`${n.area.name} ${n.section.name} ${n.task.title}`)).map(n=>n.task.id));
-  if(!rootIds.size&&validNodes[0])rootIds.add(validNodes[0].task.id);
+  const roots=new Set(validNodes.filter(n=>/starta byggarbetsplats|startbesked|byggstart/i.test(`${n.area.name} ${n.section.name} ${n.task.title}`)).map(n=>n.task.id));
+  if(!roots.size&&validNodes[0])roots.add(validNodes[0].task.id);
   const memo=new Map<string,number>();
   return validNodes.map(node=>{
    const requires=clean[node.task.id]||[];
    const raw=rawStatus(node.task);
    const prerequisitesDone=requires.length>0&&requires.every(id=>doneIds.has(id));
-   const status:PlanStatus=raw==='done'?'done':raw==='active'?'active':requires.length&&!prerequisitesDone?'blocked':prerequisitesDone||rootIds.has(node.task.id)?'ready':'planned';
+   const status:PlanStatus=raw==='done'?'done':raw==='active'?'active':requires.length&&!prerequisitesDone?'blocked':prerequisitesDone||roots.has(node.task.id)?'ready':'planned';
    return{...node,requires,status,stage:stageFor(node.task.id,clean,memo,new Set())};
   });
  },[validNodes,dependencies]);
@@ -263,75 +269,73 @@ export function GraphicalPlanView({projectId,projectName}:Props){
  const done=allNodes.filter(n=>n.status==='done').length;
  const stops=allNodes.filter(n=>n.stop).length;
  const ready=allNodes.filter(n=>n.status==='ready'||n.status==='active').length;
- const maxStage=Math.max(0,...allNodes.map(n=>n.stage));
- const rawStages=useMemo(()=>Array.from({length:maxStage+1},(_,stage)=>allNodes.filter(n=>n.stage===stage)),[allNodes,maxStage]);
+ const children=useMemo(()=>{
+  const map=new Map<string,string[]>();
+  for(const node of allNodes)for(const parent of node.requires)map.set(parent,[...(map.get(parent)||[]),node.task.id]);
+  return map;
+ },[allNodes]);
+
  const stages=useMemo(()=>{
-  const result=rawStages.map(nodes=>[...nodes]);
-  if(result.length<2)return result;
-  const children=new Map<string,string[]>();
-  for(const node of allNodes)for(const parent of node.requires)children.set(parent,[...(children.get(parent)||[]),node.task.id]);
+  const maxStage=Math.max(0,...allNodes.map(n=>n.stage));
+  const result=Array.from({length:maxStage+1},(_,stage)=>allNodes.filter(n=>n.stage===stage));
   const stableOrder=new Map(allNodes.map((node,index)=>[node.task.id,index]));
-  const indexMap=()=>{const map=new Map<string,number>();for(const nodes of result)nodes.forEach((node,index)=>map.set(node.task.id,index));return map;};
-  const sortByNeighbors=(nodes:PlanNode[],neighborIds:(node:PlanNode)=>string[],indices:Map<string,number>)=>[...nodes].sort((a,b)=>{
-   const av=neighborIds(a).map(id=>indices.get(id)).filter((v):v is number=>v!==undefined);
-   const bv=neighborIds(b).map(id=>indices.get(id)).filter((v):v is number=>v!==undefined);
-   const aa=av.length?av.reduce((s,v)=>s+v,0)/av.length:Number.POSITIVE_INFINITY;
-   const bb=bv.length?bv.reduce((s,v)=>s+v,0)/bv.length:Number.POSITIVE_INFINITY;
-   return aa-bb||(stableOrder.get(a.task.id)??0)-(stableOrder.get(b.task.id)??0);
+  const posIndex=()=>{const map=new Map<string,number>();result.forEach(nodes=>nodes.forEach((n,i)=>map.set(n.task.id,i)));return map;};
+  const sortNear=(nodes:PlanNode[],ids:(n:PlanNode)=>string[],positions:Map<string,number>)=>[...nodes].sort((a,b)=>{
+   const score=(n:PlanNode)=>{const vals=ids(n).map(id=>positions.get(id)).filter((v):v is number=>v!==undefined);return vals.length?vals.reduce((s,v)=>s+v,0)/vals.length:Number.POSITIVE_INFINITY;};
+   return score(a)-score(b)||(stableOrder.get(a.task.id)??0)-(stableOrder.get(b.task.id)??0);
   });
-  const crossingScore=()=>{
-   const pos=indexMap();
-   let score=0;
-   for(const nodeA of allNodes){
-    const aTo=pos.get(nodeA.task.id);if(aTo===undefined)continue;
-    for(const parentA of nodeA.requires){
-     const pa=allNodes.find(n=>n.task.id===parentA);if(!pa)continue;
-     const aFrom=pos.get(parentA);if(aFrom===undefined)continue;
-     for(const nodeB of allNodes){
-      if(nodeB.task.id===nodeA.task.id||nodeB.stage!==nodeA.stage)continue;
-      const bTo=pos.get(nodeB.task.id);if(bTo===undefined)continue;
-      for(const parentB of nodeB.requires){
-       const pb=allNodes.find(n=>n.task.id===parentB);if(!pb||pb.stage!==pa.stage||parentB===parentA)continue;
-       const bFrom=pos.get(parentB);if(bFrom===undefined)continue;
-       if((aFrom-bFrom)*(aTo-bTo)<0)score++;
-      }
-     }
-    }
-   }
-   return score/2;
-  };
   for(let pass=0;pass<8;pass++){
-   let indices=indexMap();
-   for(let stage=1;stage<result.length;stage++)result[stage]=sortByNeighbors(result[stage],node=>node.requires,indices);
-   indices=indexMap();
-   for(let stage=result.length-2;stage>=0;stage--)result[stage]=sortByNeighbors(result[stage],node=>children.get(node.task.id)||[],indices);
-  }
-  let best=crossingScore();
-  for(let round=0;round<12;round++){
-   let improved=false;
-   for(let stage=0;stage<result.length;stage++){
-    const nodes=result[stage];
-    for(let i=0;i<nodes.length-1;i++){
-     [nodes[i],nodes[i+1]]=[nodes[i+1],nodes[i]];
-     const score=crossingScore();
-     if(score<best){best=score;improved=true;}
-     else [nodes[i],nodes[i+1]]=[nodes[i+1],nodes[i]];
-    }
-   }
-   if(!improved)break;
+   let indices=posIndex();
+   for(let stage=1;stage<result.length;stage++)result[stage]=sortNear(result[stage],n=>n.requires,indices);
+   indices=posIndex();
+   for(let stage=result.length-2;stage>=0;stage--)result[stage]=sortNear(result[stage],n=>children.get(n.task.id)||[],indices);
   }
   return result;
- },[rawStages,allNodes]);
+ },[allNodes,children]);
+
  const positions=useMemo(()=>{
-  const map=new Map<string,{x:number;y:number}>();
-  const xGap=218,yGap=94,nodeW=190,maxRows=Math.max(...stages.map(s=>s.length),1);
+  const map=new Map<string,Position>();
+  const maxRows=Math.max(...stages.map(s=>s.length),1);
+  const graphHeight=Math.max(520,120+(maxRows-1)*Y_GAP+NODE_H);
   for(let stage=0;stage<stages.length;stage++){
    const nodes=stages[stage];
-   const offset=Math.max(0,(maxRows-nodes.length)*yGap/2);
-   nodes.forEach((node,index)=>map.set(node.task.id,{x:30+stage*xGap,y:42+offset+index*yGap}));
+   const blockHeight=(nodes.length-1)*Y_GAP+NODE_H;
+   const top=Math.max(42,(graphHeight-blockHeight)/2);
+   nodes.forEach((node,index)=>map.set(node.task.id,{x:30+stage*X_GAP,y:top+index*Y_GAP}));
   }
-  return{map,width:Math.max(700,70+stages.length*xGap+nodeW),height:Math.max(440,100+maxRows*yGap)};
+  return{map,width:Math.max(760,90+Math.max(0,stages.length-1)*X_GAP+NODE_W),height:graphHeight};
  },[stages]);
+
+ const edgeMeta=useMemo(()=>{
+  const outgoing=new Map<string,string[]>();
+  const incoming=new Map<string,string[]>();
+  for(const node of allNodes){
+   incoming.set(node.task.id,[...node.requires].sort((a,b)=>(positions.map.get(a)?.y??0)-(positions.map.get(b)?.y??0)));
+   for(const parent of node.requires)outgoing.set(parent,[...(outgoing.get(parent)||[]),node.task.id]);
+  }
+  for(const [,list] of outgoing)list.sort((a,b)=>(positions.map.get(a)?.y??0)-(positions.map.get(b)?.y??0));
+  return{outgoing,incoming};
+ },[allNodes,positions]);
+
+ function edgePath(parentId:string,childId:string){
+  const from=positions.map.get(parentId),to=positions.map.get(childId);
+  if(!from||!to)return'';
+  const outgoing=edgeMeta.outgoing.get(parentId)||[childId];
+  const incoming=edgeMeta.incoming.get(childId)||[parentId];
+  const outOffsets=spreadOffsets(outgoing.length,11);
+  const inOffsets=spreadOffsets(incoming.length,11);
+  const outIndex=Math.max(0,outgoing.indexOf(childId));
+  const inIndex=Math.max(0,incoming.indexOf(parentId));
+  const y1=from.y+NODE_H/2+outOffsets[outIndex];
+  const y2=to.y+NODE_H/2+inOffsets[inIndex];
+  const x1=from.x+NODE_W;
+  const x2=to.x;
+  const gap=Math.max(32,x2-x1);
+  const laneBase=x1+Math.min(72,Math.max(34,gap*.42));
+  const siblingBias=(outIndex-(outgoing.length-1)/2)*7+(inIndex-(incoming.length-1)/2)*5;
+  const lane=Math.min(x2-26,Math.max(x1+26,laneBase+siblingBias));
+  return `M ${x1} ${y1} C ${x1+18} ${y1}, ${lane-12} ${y1}, ${lane} ${y1} L ${lane} ${y2} C ${lane+12} ${y2}, ${x2-18} ${y2}, ${x2} ${y2}`;
+ }
 
  if(loading)return <div className="graphPlanState">Hämtar grafisk plan…</div>;
  if(error)return <div className="graphPlanState error">{error}</div>;
@@ -339,7 +343,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   <header className="graphPlanHeader"><div><small>GRAFISK PLAN</small><h1>{projectName||'Projektplan'}</h1><p>Grundordningen följer projektstrukturen. Endast verkliga parallella arbetsgrenar bryter den kronologiska kedjan.</p></div><div className="graphPlanHeaderActions"><div className="graphPlanSummary"><span><b>{done}</b> klara</span><span><b>{ready}</b> kan göras nu</span><span><b>{stops}</b> stoppunkter</span></div><button className={editDeps?'active':''} onClick={()=>setEditDeps(v=>!v)}>↔ {editDeps?'Klar med beroenden':'Redigera beroenden'}</button></div></header>
   <div className="graphLegend"><span><i className="legendDot done">✓</i>Klar</span><span><i className="legendDot active"/>Pågår</span><span><i className="legendDot ready"/>Kan göras nu</span><span><i className="legendDot blocked">🔒</i>Blockerad</span><span><i className="legendDot stop"/>Stoppunkt</span></div>
   {allNodes.length===0?<div className="graphPlanEmpty"><b>Planen är tom</b><span>Lägg först in moment i projektstrukturen.</span></div>:<div className="graphPlanLayout">
-   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height} aria-hidden="true">{allNodes.flatMap(node=>node.requires.map(parentId=>{const from=positions.map.get(parentId),to=positions.map.get(node.task.id);if(!from||!to)return null;const x1=from.x+190,y1=from.y+37,x2=to.x,y2=to.y+37;const dx=Math.max(14,Math.min(34,(x2-x1)*.22));const related=selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);return <path key={`${parentId}-${node.task.id}`} d={`M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>;}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
+   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height} aria-hidden="true"><defs><marker id="dependencyArrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3.5 L0,7 z" className="dependencyArrowHead"/></marker><marker id="dependencyArrowRelated" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3.5 L0,7 z" className="dependencyArrowHead related"/></marker></defs>{allNodes.flatMap(node=>node.requires.map(parentId=>{const related=!!selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);return <path key={`${parentId}-${node.task.id}`} d={edgePath(parentId,node.task.id)} markerEnd={related?'url(#dependencyArrowRelated)':'url(#dependencyArrow)'} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>;}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
    {selectedNode&&<aside className="graphInspector"><div className="graphInspectorTop"><span className={`graphInspectorNode ${selectedNode.stop?'stop':''} ${selectedNode.status}`}>{selectedNode.status==='done'?'✓':selectedNode.status==='blocked'?'×':selectedNode.stop?'!':''}</span><div><small>{selectedNode.stop?'STOPPUNKT':'MOMENT'}</small><h2>{selectedNode.task.title}</h2><p>{selectedNode.status==='done'?'Klar':selectedNode.status==='active'?'Pågår':selectedNode.status==='ready'?'Kan göras nu':selectedNode.status==='blocked'?'Blockerad':'Planerad'}</p></div></div><dl><div><dt>Arbetsområde</dt><dd>{selectedNode.area.name}</dd></div><div><dt>Arbetsavsnitt</dt><dd>{selectedNode.section.name}</dd></div><div><dt>Aktiviteter</dt><dd>{selectedNode.activities.length}</dd></div></dl><div className="graphDependencies"><div className="graphDependenciesHeader"><small>MÅSTE VARA KLART FÖRST</small>{editDeps&&<button onClick={resetSuggestions}>Återställ grundordning</button>}</div>{editDeps?<div className="dependencyEditor">{allNodes.filter(n=>n.task.id!==selectedNode.task.id).map(candidate=><label key={candidate.task.id}><input type="checkbox" checked={selectedNode.requires.includes(candidate.task.id)} onChange={()=>toggleDependency(selectedNode.task.id,candidate.task.id)}/><span>{candidate.task.title}</span><small>{candidate.section.name}</small></label>)}</div>:selectedNode.requires.length?<div className="dependencyList">{selectedNode.requires.map(id=>{const required=allNodes.find(n=>n.task.id===id);return required?<div key={id}><span className={`dependencyState ${required.status}`}>{required.status==='done'?'✓':'•'}</span><b>{required.task.title}</b><small>{required.status==='done'?'Klar':'Inte klar'}</small></div>:null;})}</div>:<p className="noDependencies">Detta är ett rotmoment i planen.</p>}</div>{selectedNode.task.description&&<div className="graphDescription"><small>BESKRIVNING</small><p>{selectedNode.task.description}</p></div>}{selectedNode.activities.length>0&&<div className="graphActivities"><small>AKTIVITETER I MOMENTET</small>{selectedNode.activities.map(a=><div key={a.id}><span>{['approval','control','check','measurement'].includes(a.activity_type)?'◆':'○'}</span><b>{a.title}</b></div>)}</div>}</aside>}
   </div>}
  </div>;
