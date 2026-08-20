@@ -1,4 +1,4 @@
-import { useEffect,useMemo,useState } from 'react';
+import { useEffect,useMemo,useRef,useState } from 'react';
 
 type Area={id:string;project_id:string;name:string;sort_order?:number};
 type Section={id:string;work_area_id:string;name:string;sort_order?:number};
@@ -10,14 +10,17 @@ type PlanStatus='done'|'active'|'ready'|'blocked'|'planned';
 type DependencyMap=Record<string,string[]>;
 type PlanNode={task:Task;area:Area;section:Section;activities:Activity[];stop:boolean;status:PlanStatus;requires:string[];stage:number};
 type Position={x:number;y:number};
+type OffsetMap=Record<string,{dx:number;dy:number}>;
 
 const EMPTY:Structure={areas:[],sections:[],tasks:[],activities:[]};
 const STOP_WORDS=/kontroll|besikt|inspektion|godkänn|startbesked|slutbesked|samråd|utsättning|lägeskontroll|provtryck/i;
 const STORAGE_PREFIX='byggplan.graph.dependencies.v5.';
+const POSITION_PREFIX='byggplan.graph.positions.v1.';
 const NODE_W=190;
 const NODE_H=82;
-const X_GAP=248;
+const X_GAP=300;
 const Y_GAP=118;
+const MAX_X_OFFSET=46;
 
 function order<T extends {sort_order?:number;name?:string;title?:string}>(items:T[]){
  return [...items].sort((a,b)=>(a.sort_order??999999)-(b.sort_order??999999)||String(a.name||a.title||'').localeCompare(String(b.name||b.title||''),'sv'));
@@ -34,6 +37,8 @@ function isStop(task:Task,activities:Activity[]){
 function unique(values:string[]){return Array.from(new Set(values.filter(Boolean)));}
 function readDependencies(projectId:string):DependencyMap{try{return JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}${projectId}`)||'{}') as DependencyMap}catch{return{}}}
 function writeDependencies(projectId:string,value:DependencyMap){try{localStorage.setItem(`${STORAGE_PREFIX}${projectId}`,JSON.stringify(value))}catch{}}
+function readOffsets(projectId:string):OffsetMap{try{return JSON.parse(localStorage.getItem(`${POSITION_PREFIX}${projectId}`)||'{}') as OffsetMap}catch{return{}}}
+function writeOffsets(projectId:string,value:OffsetMap){try{localStorage.setItem(`${POSITION_PREFIX}${projectId}`,JSON.stringify(value))}catch{}}
 function wouldCreateCycle(source:DependencyMap,taskId:string,requiredId:string){
  if(taskId===requiredId)return true;
  const visited=new Set<string>();
@@ -118,7 +123,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  const fonster=first(/fönster|ytterdörr/);
  const fasad=first(/färdigställ fasad|fasad och yttre|yttre väggskikt/);
  const klimatskal=first(/isolera och lufttäta|isolering och lufttäthet|ångbroms|klimatskal/);
-
  const vvsPrep=first(/förbered vvs-installation/);
  const vvsInstall=first(/montera spillvatten och vatten/);
  const elPrep=first(/förbered elinstallation/);
@@ -168,7 +172,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(fonster,yttervagg.length?yttervagg:botten);
  setParents(fasad,combineTasks(fonster,yttervagg));
  setParents(klimatskal,combineTasks(yttertak,fonster));
-
  const weatherTight=klimatskal.length?klimatskal:combineTasks(yttertak,fonster,yttervagg);
  setParents(vvsPrep,weatherTight);
  setParents(vvsInstall,vvsPrep.length?vvsPrep:weatherTight);
@@ -178,7 +181,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(ventilation,weatherTight);
  setParents(heating,weatherTight);
  setParents(fireplace,combineTasks(takstom,weatherTight));
-
  const hiddenFloor=combineTasks(vvsInstall,elHidden);
  const hiddenWalls=combineTasks(vvsInstall,elHidden,ventilation);
  const hiddenCeiling=combineTasks(elHidden,ventilation,fireplace);
@@ -187,13 +189,11 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(releaseCeiling,hiddenCeiling.length?hiddenCeiling:weatherTight);
  setParents(floor,releaseFloor.length?releaseFloor:hiddenFloor);
  setParents(innerCeiling,releaseCeiling.length?releaseCeiling:hiddenCeiling);
-
  const wetStart=combineTasks(floor,innerWalls,vvsInstall);
  setParents(wetCheck,wetStart.length?wetStart:weatherTight);
  setParents(wetBase,wetCheck);
  setParents(wetSeal,wetBase);
  setParents(wetFinish,wetSeal);
-
  const constructionClosed=combineTasks(floor,innerWalls,innerCeiling,releaseWalls);
  setParents(innerFinish,constructionClosed.length?constructionClosed:weatherTight);
  setParents(fixedInterior,combineTasks(innerFinish,vvsInstall,elHidden));
@@ -206,7 +206,6 @@ function suggestedDependencies(structure:Structure):DependencyMap{
  setParents(finalBuilding,finished.length?finished:commission);
  setParents(slutdocs,finalBuilding.length?finalBuilding:finished);
  setParents(slutbesked,slutdocs.length?slutdocs:finalBuilding);
-
  const rootIds=new Set(start.map(t=>t.id));
  const fallbackRoot=start[0];
  for(const task of sorted){
@@ -238,6 +237,27 @@ export function GraphicalPlanView({projectId,projectName}:Props){
  const[selected,setSelected]=useState('');
  const[dependencies,setDependencies]=useState<DependencyMap>({});
  const[editDeps,setEditDeps]=useState(false);
+ const[offsets,setOffsets]=useState<OffsetMap>({});
+ const dragRef=useRef<{id:string;startX:number;startY:number;dx:number;dy:number}|null>(null);
+
+ useEffect(()=>{setOffsets(projectId?readOffsets(projectId):{});},[projectId]);
+ useEffect(()=>{
+  const move=(e:PointerEvent)=>{
+   const drag=dragRef.current;if(!drag)return;
+   const dx=Math.max(-MAX_X_OFFSET,Math.min(MAX_X_OFFSET,drag.dx+e.clientX-drag.startX));
+   const dy=drag.dy+e.clientY-drag.startY;
+   setOffsets(current=>({...current,[drag.id]:{dx,dy}}));
+  };
+  const up=()=>{
+   if(!dragRef.current)return;
+   dragRef.current=null;
+   setOffsets(current=>{writeOffsets(projectId,current);return current;});
+  };
+  window.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',up);
+  window.addEventListener('pointercancel',up);
+  return()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);};
+ },[projectId]);
 
  useEffect(()=>{
   let cancelled=false;
@@ -274,6 +294,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   saveDeps({...dependencies,[taskId]:current.includes(requiredId)?current.filter(id=>id!==requiredId):unique([...current,requiredId])});
  }
  function resetSuggestions(){saveDeps(suggestedDependencies(structure));}
+ function resetPositions(){setOffsets({});writeOffsets(projectId,{});}
 
  const validNodes=useMemo(()=>order(structure.tasks).map(task=>{
   const section=structure.sections.find(s=>s.id===task.work_section_id);
@@ -326,7 +347,7 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   return result;
  },[allNodes,children]);
 
- const positions=useMemo(()=>{
+ const autoPositions=useMemo(()=>{
   const map=new Map<string,Position>();
   const maxRows=Math.max(...stages.map(s=>s.length),1);
   const graphHeight=Math.max(520,120+(maxRows-1)*Y_GAP+NODE_H);
@@ -338,6 +359,20 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   }
   return{map,width:Math.max(760,90+Math.max(0,stages.length-1)*X_GAP+NODE_W),height:graphHeight};
  },[stages]);
+
+ const positions=useMemo(()=>{
+  const map=new Map<string,Position>();
+  let width=autoPositions.width,height=autoPositions.height;
+  for(const node of allNodes){
+   const base=autoPositions.map.get(node.task.id);if(!base)continue;
+   const offset=offsets[node.task.id]||{dx:0,dy:0};
+   const pos={x:Math.max(20,base.x+offset.dx),y:Math.max(20,base.y+offset.dy)};
+   map.set(node.task.id,pos);
+   width=Math.max(width,pos.x+NODE_W+70);
+   height=Math.max(height,pos.y+NODE_H+80);
+  }
+  return{map,width,height};
+ },[allNodes,autoPositions,offsets]);
 
  const edgeMeta=useMemo(()=>{
   const outgoing=new Map<string,string[]>();
@@ -364,19 +399,19 @@ export function GraphicalPlanView({projectId,projectName}:Props){
   const x1=from.x+NODE_W;
   const x2=to.x;
   const gap=x2-x1;
-  const laneBase=x1+Math.min(72,Math.max(34,gap*.42));
-  const siblingBias=(outIndex-(outgoing.length-1)/2)*7+(inIndex-(incoming.length-1)/2)*5;
-  const lane=Math.min(x2-26,Math.max(x1+26,laneBase+siblingBias));
+  const laneBase=x1+Math.min(92,Math.max(40,gap*.42));
+  const siblingBias=(outIndex-(outgoing.length-1)/2)*9+(inIndex-(incoming.length-1)/2)*6;
+  const lane=Math.min(x2-30,Math.max(x1+30,laneBase+siblingBias));
   return `M ${x1} ${y1} C ${x1+18} ${y1}, ${lane-12} ${y1}, ${lane} ${y1} L ${lane} ${y2} C ${lane+12} ${y2}, ${x2-18} ${y2}, ${x2} ${y2}`;
  }
 
  if(loading)return <div className="graphPlanState">Hämtar grafisk plan…</div>;
  if(error)return <div className="graphPlanState error">{error}</div>;
  return <div className="graphPlanPage">
-  <header className="graphPlanHeader"><div><small>GRAFISK PLAN</small><h1>{projectName||'Projektplan'}</h1><p>Grundordningen följer projektstrukturen. Endast verkliga parallella arbetsgrenar bryter den kronologiska kedjan.</p></div><div className="graphPlanHeaderActions"><div className="graphPlanSummary"><span><b>{done}</b> klara</span><span><b>{ready}</b> kan göras nu</span><span><b>{stops}</b> stoppunkter</span></div><button className={editDeps?'active':''} onClick={()=>setEditDeps(v=>!v)}>↔ {editDeps?'Klar med beroenden':'Redigera beroenden'}</button></div></header>
+  <header className="graphPlanHeader"><div><small>GRAFISK PLAN</small><h1>{projectName||'Projektplan'}</h1><p>Grundordningen följer projektstrukturen. Dra boxarna för att göra en tät del av planen lättare att läsa.</p></div><div className="graphPlanHeaderActions"><div className="graphPlanSummary"><span><b>{done}</b> klara</span><span><b>{ready}</b> kan göras nu</span><span><b>{stops}</b> stoppunkter</span></div><div className="graphPlanButtons"><button className={editDeps?'active':''} onClick={()=>setEditDeps(v=>!v)}>↔ {editDeps?'Klar med beroenden':'Redigera beroenden'}</button><button onClick={resetPositions}>Återställ placering</button></div></div></header>
   <div className="graphLegend"><span><i className="legendDot done">✓</i>Klar</span><span><i className="legendDot active"/>Pågår</span><span><i className="legendDot ready"/>Kan göras nu</span><span><i className="legendDot blocked">🔒</i>Blockerad</span><span><i className="legendDot stop"/>Stoppunkt</span></div>
   {allNodes.length===0?<div className="graphPlanEmpty"><b>Planen är tom</b><span>Lägg först in moment i projektstrukturen.</span></div>:<div className="graphPlanLayout">
-   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height} aria-hidden="true"><defs><marker id="dependencyArrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3.5 L0,7 z" className="dependencyArrowHead"/></marker><marker id="dependencyArrowRelated" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3.5 L0,7 z" className="dependencyArrowHead related"/></marker></defs>{allNodes.flatMap(node=>node.requires.map(parentId=>{const path=edgePath(parentId,node.task.id);if(!path)return null;const related=!!selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);return <path key={`${parentId}-${node.task.id}`} d={path} markerEnd={related?'url(#dependencyArrowRelated)':'url(#dependencyArrow)'} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>;}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
+   <section className="graphCanvas dependencyCanvas" aria-label="Grafisk projektplan"><div className="dependencyGraph" style={{width:positions.width,height:positions.height}}><svg className="dependencyEdges" width={positions.width} height={positions.height} aria-hidden="true"><defs><marker id="dependencyArrow" markerWidth="5" markerHeight="5" refX="4.3" refY="2.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4.5,2.5 L0,5 z" className="dependencyArrowHead"/></marker><marker id="dependencyArrowRelated" markerWidth="5" markerHeight="5" refX="4.3" refY="2.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L4.5,2.5 L0,5 z" className="dependencyArrowHead related"/></marker></defs>{allNodes.flatMap(node=>node.requires.map(parentId=>{const path=edgePath(parentId,node.task.id);if(!path)return null;const related=!!selectedNode&&(selectedNode.task.id===node.task.id||selectedNode.task.id===parentId);return <path key={`${parentId}-${node.task.id}`} d={path} markerEnd={related?'url(#dependencyArrowRelated)':'url(#dependencyArrow)'} className={`dependencyEdge ${node.status==='done'?'done':''} ${selectedNode&&!related?'dimmed':''} ${related?'related':''}`}/>;}))}</svg>{allNodes.map(node=>{const pos=positions.map.get(node.task.id)!;const off=offsets[node.task.id]||{dx:0,dy:0};return <button key={node.task.id} style={{left:pos.x,top:pos.y}} className={`graphStep dependencyGraphNode draggable ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`} onPointerDown={e=>{if(e.button!==0)return;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);dragRef.current={id:node.task.id,startX:e.clientX,startY:e.clientY,dx:off.dx,dy:off.dy};}} onClick={()=>setSelected(node.task.id)}><span className="graphNode">{node.status==='done'?'✓':node.status==='blocked'?'×':node.stop?'!':''}</span><span className="graphNodeText"><b>{node.task.title}</b><small>{node.stop?'STOPPUNKT · ':''}{node.status==='done'?'Klar':node.status==='active'?'Pågår':node.status==='ready'?'Kan göras nu':node.status==='blocked'?'Blockerad':'Planerad'}</small></span></button>;})}</div></section>
    {selectedNode&&<aside className="graphInspector"><div className="graphInspectorTop"><span className={`graphInspectorNode ${selectedNode.stop?'stop':''} ${selectedNode.status}`}>{selectedNode.status==='done'?'✓':selectedNode.status==='blocked'?'×':selectedNode.stop?'!':''}</span><div><small>{selectedNode.stop?'STOPPUNKT':'MOMENT'}</small><h2>{selectedNode.task.title}</h2><p>{selectedNode.status==='done'?'Klar':selectedNode.status==='active'?'Pågår':selectedNode.status==='ready'?'Kan göras nu':selectedNode.status==='blocked'?'Blockerad':'Planerad'}</p></div></div><dl><div><dt>Arbetsområde</dt><dd>{selectedNode.area.name}</dd></div><div><dt>Arbetsavsnitt</dt><dd>{selectedNode.section.name}</dd></div><div><dt>Aktiviteter</dt><dd>{selectedNode.activities.length}</dd></div></dl><div className="graphDependencies"><div className="graphDependenciesHeader"><small>MÅSTE VARA KLART FÖRST</small>{editDeps&&<button onClick={resetSuggestions}>Återställ grundordning</button>}</div>{editDeps?<div className="dependencyEditor">{allNodes.filter(n=>n.task.id!==selectedNode.task.id).map(candidate=>{const checked=selectedNode.requires.includes(candidate.task.id);const cyclic=!checked&&wouldCreateCycle(dependencies,selectedNode.task.id,candidate.task.id);return <label key={candidate.task.id} className={cyclic?'disabled':''}><input type="checkbox" disabled={cyclic} checked={checked} onChange={()=>toggleDependency(selectedNode.task.id,candidate.task.id)}/><span>{candidate.task.title}</span><small>{cyclic?'Skulle skapa cirkulärt beroende':candidate.section.name}</small></label>;})}</div>:selectedNode.requires.length?<div className="dependencyList">{selectedNode.requires.map(id=>{const required=allNodes.find(n=>n.task.id===id);return required?<div key={id}><span className={`dependencyState ${required.status}`}>{required.status==='done'?'✓':'•'}</span><b>{required.task.title}</b><small>{required.status==='done'?'Klar':'Inte klar'}</small></div>:null;})}</div>:<p className="noDependencies">Detta är ett rotmoment i planen.</p>}</div>{selectedNode.task.description&&<div className="graphDescription"><small>BESKRIVNING</small><p>{selectedNode.task.description}</p></div>}{selectedNode.activities.length>0&&<div className="graphActivities"><small>AKTIVITETER I MOMENTET</small>{selectedNode.activities.map(a=><div key={a.id}><span>{['approval','control','check','measurement'].includes(a.activity_type)?'◆':'○'}</span><b>{a.title}</b></div>)}</div>}</aside>}
   </div>}
  </div>;
