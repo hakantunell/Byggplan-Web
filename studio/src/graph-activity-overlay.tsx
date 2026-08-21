@@ -21,7 +21,7 @@ const syncedTasks=new Set<string>();
 
 function norm(v:string){return v.trim().toLocaleLowerCase('sv-SE')}
 function isControlActivity(activity:Activity){return ['approval','control','check','measurement'].includes(String(activity.activity_type||'').toLowerCase())}
-function isActiveActivity(id:string){return metadata.get(id)?.applicability!=='deprecated'}
+function isMomentActivity(id:string){const applicability=metadata.get(id)?.applicability;return applicability!=='deprecated'&&applicability!=='project_condition'}
 
 function applyTaskVisualStatus(taskId:string,status:string){
   const node=document.querySelector<HTMLElement>(`.dependencyGraphNode[data-node-id="${CSS.escape(taskId)}"]`);
@@ -30,7 +30,7 @@ function applyTaskVisualStatus(taskId:string,status:string){
 }
 
 function deriveTaskStatus(taskId:string){
-  const activities=(structure.activities||[]).filter(a=>a.task_id===taskId&&isActiveActivity(a.id));
+  const activities=(structure.activities||[]).filter(a=>a.task_id===taskId&&isMomentActivity(a.id));
   if(!activities.length)return taskStatusById.get(taskId)||'todo';
   const done=activities.filter(a=>doneByActivity.get(a.id)===true).length;
   return done===activities.length?'done':done>0?'active':'todo';
@@ -95,9 +95,9 @@ function decorateInspector(){
   for(const row of rows){
     const title=row.querySelector('b')?.textContent||'';
     const candidates=activities.filter(a=>norm(a.title)===norm(title));
-    const activity=candidates.find(a=>isActiveActivity(a.id))||candidates[0];
+    const activity=candidates.find(a=>isMomentActivity(a.id))||candidates[0];
     if(!activity)continue;
-    if(!isActiveActivity(activity.id)){row.style.display='none';continue;}else row.style.removeProperty('display');
+    if(!isMomentActivity(activity.id)){row.style.display='none';continue;}else row.style.removeProperty('display');
     row.dataset.activityId=activity.id;
     row.classList.add('graphActivityRowInteractive');
     row.setAttribute('role','button');row.setAttribute('tabindex','0');
@@ -127,7 +127,7 @@ function decorateInspector(){
 function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(decorateInspector,30)}
 
 export function installGraphActivityOverlay(){
-  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV4';if(w[marker])return;w[marker]=true;
+  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV5';if(w[marker])return;w[marker]=true;
   transportFetch=window.fetch.bind(window);
   const originalFetch=transportFetch;
   window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
