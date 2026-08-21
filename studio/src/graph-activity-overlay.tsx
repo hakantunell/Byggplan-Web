@@ -6,7 +6,7 @@ type Activity={id:string;task_id:string;title:string;activity_type?:string};
 type Structure={activities?:Activity[]};
 type Meta={activity_id:string;governing_documents?:unknown[];applicability?:string};
 type TaskActivity={id:string;done?:boolean};
-type TaskResponse={tasks?:Array<{activities?:TaskActivity[]}>};
+type TaskResponse={tasks?:Array<{id:string;status?:string;activities?:TaskActivity[]}>};
 
 let currentProjectId='';
 let structure:Structure={};
@@ -15,18 +15,32 @@ let doneByActivity=new Map<string,boolean>();
 let overlayRoot:Root|null=null;
 let observer:MutationObserver|null=null;
 let refreshTimer=0;
+let transportFetch:typeof window.fetch=window.fetch.bind(window);
+const syncedTasks=new Set<string>();
 
 function norm(v:string){return v.trim().toLocaleLowerCase('sv-SE')}
 function isControlActivity(activity:Activity){return ['approval','control','check','measurement'].includes(String(activity.activity_type||'').toLowerCase())}
+
+function applyTaskVisualStatus(taskId:string,status:string){
+  const node=document.querySelector<HTMLElement>(`.dependencyGraphNode[data-node-id="${CSS.escape(taskId)}"]`);
+  if(node){node.classList.remove('done','active','ready','blocked','planned');node.classList.add(status==='done'?'done':status==='active'?'active':'planned');const glyph=node.querySelector<HTMLElement>('.graphNode');if(glyph&&status==='done')glyph.textContent='✓';const label=node.querySelector<HTMLElement>('.graphNodeText small');if(label){const prefix=label.textContent?.includes('STOPPUNKT')?'STOPPUNKT · ':'';label.textContent=`${prefix}${status==='done'?'Klar':status==='active'?'Pågår':'Planerad'}`;}}
+  if(selectedTaskId()===taskId){const inspector=document.querySelector<HTMLElement>('.graphInspector');const state=inspector?.querySelector<HTMLElement>('.graphInspectorTop p');if(state)state.textContent=status==='done'?'Klar':status==='active'?'Pågår':'Planerad';const icon=inspector?.querySelector<HTMLElement>('.graphInspectorNode');if(icon&&status==='done'){icon.classList.remove('active','ready','blocked','planned');icon.classList.add('done');icon.textContent='✓';}}
+}
+
+async function syncTaskStatus(taskId:string){
+  if(!taskId||syncedTasks.has(taskId))return;
+  syncedTasks.add(taskId);
+  try{const r=await transportFetch(`/api/studio/tasks/${encodeURIComponent(taskId)}/sync-status`,{method:'PUT'});if(!r.ok)return;const d=await r.json() as {status?:string};if(d.status){applyTaskVisualStatus(taskId,d.status);window.dispatchEvent(new CustomEvent('byggplan:task-status-changed',{detail:{taskId,status:d.status,projectId:currentProjectId}}));}}catch{}
+}
 
 async function loadContext(projectId:string){
   if(!projectId)return;
   currentProjectId=projectId;
   try{
     const [sr,mr,tr]=await Promise.all([
-      fetch(`/api/studio/structure?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
-      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
-      fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
+      transportFetch(`/api/studio/structure?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
+      transportFetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
+      transportFetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
     ]);
     if(sr.ok)structure=await sr.json() as Structure;
     if(mr.ok){const data=await mr.json() as {items?:Meta[]};metadata=new Map((data.items||[]).map(x=>[x.activity_id,x]));}
@@ -65,6 +79,7 @@ function decorateInspector(){
   const taskId=selectedTaskId();
   const box=document.querySelector<HTMLElement>('.graphActivities');
   if(!taskId||!box)return;
+  void syncTaskStatus(taskId);
   const activities=(structure.activities||[]).filter(a=>a.task_id===taskId);
   const rows=Array.from(box.querySelectorAll<HTMLElement>(':scope > div'));
   for(const row of rows){
@@ -87,7 +102,7 @@ function decorateInspector(){
     const meta=metadata.get(activity.id);const count=meta?.applicability==='deprecated'?0:(meta?.governing_documents||[]).length;
     let badge=row.querySelector<HTMLElement>('.graphActivityGoverningBadge');
     if(count>0){
-      if(!badge){badge=document.createElement('span');badge.className='graphActivityGoverningBadge';const heading=row.querySelector('b');heading?.insertAdjacentElement('afterend',badge);}
+      if(!badge){badge=document.createElement('span');badge.className='graphActivityGoverningBadge';row.appendChild(badge);}
       badge.textContent='📋';badge.title=`${count} koppling${count===1?'':'ar'} till styrdokument`;
       badge.setAttribute('aria-label',`${count} koppling${count===1?'':'ar'} till styrdokument`);
     }else badge?.remove();
@@ -103,8 +118,9 @@ function decorateInspector(){
 function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(decorateInspector,30)}
 
 export function installGraphActivityOverlay(){
-  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV2';if(w[marker])return;w[marker]=true;
-  const originalFetch=window.fetch.bind(window);
+  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV3';if(w[marker])return;w[marker]=true;
+  transportFetch=window.fetch.bind(window);
+  const originalFetch=transportFetch;
   window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const response=await originalFetch(input,init);
     try{
@@ -119,5 +135,5 @@ export function installGraphActivityOverlay(){
   }) as typeof window.fetch;
   observer=new MutationObserver(scheduleDecorate);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlayRoot)closeOverlay()});
-  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));decorateInspector();}}) as EventListener);
+  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));const taskId=(structure.activities||[]).find(a=>a.id===detail.activityId)?.task_id;if(taskId){syncedTasks.delete(taskId);void syncTaskStatus(taskId);}decorateInspector();}}) as EventListener);
 }
