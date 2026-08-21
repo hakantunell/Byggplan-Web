@@ -12,6 +12,7 @@ let currentProjectId='';
 let structure:Structure={};
 let metadata=new Map<string,Meta>();
 let doneByActivity=new Map<string,boolean>();
+let taskStatusById=new Map<string,string>();
 let overlayRoot:Root|null=null;
 let observer:MutationObserver|null=null;
 let refreshTimer=0;
@@ -20,17 +21,25 @@ const syncedTasks=new Set<string>();
 
 function norm(v:string){return v.trim().toLocaleLowerCase('sv-SE')}
 function isControlActivity(activity:Activity){return ['approval','control','check','measurement'].includes(String(activity.activity_type||'').toLowerCase())}
+function isActiveActivity(id:string){return metadata.get(id)?.applicability!=='deprecated'}
 
 function applyTaskVisualStatus(taskId:string,status:string){
   const node=document.querySelector<HTMLElement>(`.dependencyGraphNode[data-node-id="${CSS.escape(taskId)}"]`);
-  if(node){node.classList.remove('done','active','ready','blocked','planned');node.classList.add(status==='done'?'done':status==='active'?'active':'planned');const glyph=node.querySelector<HTMLElement>('.graphNode');if(glyph&&status==='done')glyph.textContent='✓';const label=node.querySelector<HTMLElement>('.graphNodeText small');if(label){const prefix=label.textContent?.includes('STOPPUNKT')?'STOPPUNKT · ':'';label.textContent=`${prefix}${status==='done'?'Klar':status==='active'?'Pågår':'Planerad'}`;}}
-  if(selectedTaskId()===taskId){const inspector=document.querySelector<HTMLElement>('.graphInspector');const state=inspector?.querySelector<HTMLElement>('.graphInspectorTop p');if(state)state.textContent=status==='done'?'Klar':status==='active'?'Pågår':'Planerad';const icon=inspector?.querySelector<HTMLElement>('.graphInspectorNode');if(icon&&status==='done'){icon.classList.remove('active','ready','blocked','planned');icon.classList.add('done');icon.textContent='✓';}}
+  if(node){node.classList.remove('done','active','ready','blocked','planned');node.classList.add(status==='done'?'done':status==='active'?'active':'planned');const glyph=node.querySelector<HTMLElement>('.graphNode');if(glyph){glyph.textContent=status==='done'?'✓':'';}const label=node.querySelector<HTMLElement>('.graphNodeText small');if(label){const prefix=label.textContent?.includes('STOPPUNKT')?'STOPPUNKT · ':'';label.textContent=`${prefix}${status==='done'?'Klar':status==='active'?'Pågår':'Planerad'}`;}}
+  if(selectedTaskId()===taskId){const inspector=document.querySelector<HTMLElement>('.graphInspector');const state=inspector?.querySelector<HTMLElement>('.graphInspectorTop p');if(state)state.textContent=status==='done'?'Klar':status==='active'?'Pågår':'Planerad';const icon=inspector?.querySelector<HTMLElement>('.graphInspectorNode');if(icon){icon.classList.remove('done','active','ready','blocked','planned');icon.classList.add(status==='done'?'done':status==='active'?'active':'planned');icon.textContent=status==='done'?'✓':'';}}
+}
+
+function deriveTaskStatus(taskId:string){
+  const activities=(structure.activities||[]).filter(a=>a.task_id===taskId&&isActiveActivity(a.id));
+  if(!activities.length)return taskStatusById.get(taskId)||'todo';
+  const done=activities.filter(a=>doneByActivity.get(a.id)===true).length;
+  return done===activities.length?'done':done>0?'active':'todo';
 }
 
 async function syncTaskStatus(taskId:string){
   if(!taskId||syncedTasks.has(taskId))return;
   syncedTasks.add(taskId);
-  try{const r=await transportFetch(`/api/studio/tasks/${encodeURIComponent(taskId)}/sync-status`,{method:'PUT'});if(!r.ok)return;const d=await r.json() as {status?:string};if(d.status){applyTaskVisualStatus(taskId,d.status);window.dispatchEvent(new CustomEvent('byggplan:task-status-changed',{detail:{taskId,status:d.status,projectId:currentProjectId}}));}}catch{}
+  try{const r=await transportFetch(`/api/studio/tasks/${encodeURIComponent(taskId)}/sync-status`,{method:'PUT'});if(!r.ok)return;const d=await r.json() as {status?:string};if(d.status){taskStatusById.set(taskId,d.status);applyTaskVisualStatus(taskId,d.status);window.dispatchEvent(new CustomEvent('byggplan:task-status-changed',{detail:{taskId,status:d.status,projectId:currentProjectId}}));}}catch{}
 }
 
 async function loadContext(projectId:string){
@@ -44,7 +53,7 @@ async function loadContext(projectId:string){
     ]);
     if(sr.ok)structure=await sr.json() as Structure;
     if(mr.ok){const data=await mr.json() as {items?:Meta[]};metadata=new Map((data.items||[]).map(x=>[x.activity_id,x]));}
-    if(tr.ok){const data=await tr.json() as TaskResponse;doneByActivity=new Map((data.tasks||[]).flatMap(t=>(t.activities||[]).map(a=>[a.id,Boolean(a.done)] as const)));}
+    if(tr.ok){const data=await tr.json() as TaskResponse;doneByActivity=new Map((data.tasks||[]).flatMap(t=>(t.activities||[]).map(a=>[a.id,Boolean(a.done)] as const)));taskStatusById=new Map((data.tasks||[]).map(t=>[t.id,String(t.status||'todo')]));}
   }catch{}
   decorateInspector();
 }
@@ -79,13 +88,16 @@ function decorateInspector(){
   const taskId=selectedTaskId();
   const box=document.querySelector<HTMLElement>('.graphActivities');
   if(!taskId||!box)return;
+  const localStatus=deriveTaskStatus(taskId);applyTaskVisualStatus(taskId,localStatus);
   void syncTaskStatus(taskId);
   const activities=(structure.activities||[]).filter(a=>a.task_id===taskId);
   const rows=Array.from(box.querySelectorAll<HTMLElement>(':scope > div'));
   for(const row of rows){
     const title=row.querySelector('b')?.textContent||'';
-    const activity=activities.find(a=>norm(a.title)===norm(title));
+    const candidates=activities.filter(a=>norm(a.title)===norm(title));
+    const activity=candidates.find(a=>isActiveActivity(a.id))||candidates[0];
     if(!activity)continue;
+    if(!isActiveActivity(activity.id)){row.style.display='none';continue;}else row.style.removeProperty('display');
     row.dataset.activityId=activity.id;
     row.classList.add('graphActivityRowInteractive');
     row.setAttribute('role','button');row.setAttribute('tabindex','0');
@@ -99,7 +111,7 @@ function decorateInspector(){
       status.title=isDone?'Aktiviteten är klar':isControlActivity(activity)?'Kontroll-/mätningsaktivitet':'Arbetsaktivitet';
     }
 
-    const meta=metadata.get(activity.id);const count=meta?.applicability==='deprecated'?0:(meta?.governing_documents||[]).length;
+    const meta=metadata.get(activity.id);const count=(meta?.governing_documents||[]).length;
     let badge=row.querySelector<HTMLElement>('.graphActivityGoverningBadge');
     if(count>0){
       if(!badge){badge=document.createElement('span');badge.className='graphActivityGoverningBadge';row.appendChild(badge);}
@@ -107,18 +119,15 @@ function decorateInspector(){
       badge.setAttribute('aria-label',`${count} koppling${count===1?'':'ar'} till styrdokument`);
     }else badge?.remove();
 
-    if(row.dataset.overlayBound!=='1'){
-      row.dataset.overlayBound='1';
-      row.addEventListener('click',()=>openOverlay(activity.id));
-      row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openOverlay(activity.id)}});
-    }
+    row.onclick=()=>openOverlay(activity.id);
+    row.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openOverlay(activity.id)}};
   }
 }
 
 function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(decorateInspector,30)}
 
 export function installGraphActivityOverlay(){
-  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV3';if(w[marker])return;w[marker]=true;
+  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV4';if(w[marker])return;w[marker]=true;
   transportFetch=window.fetch.bind(window);
   const originalFetch=transportFetch;
   window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
@@ -135,5 +144,5 @@ export function installGraphActivityOverlay(){
   }) as typeof window.fetch;
   observer=new MutationObserver(scheduleDecorate);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlayRoot)closeOverlay()});
-  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));const taskId=(structure.activities||[]).find(a=>a.id===detail.activityId)?.task_id;if(taskId){syncedTasks.delete(taskId);void syncTaskStatus(taskId);}decorateInspector();}}) as EventListener);
+  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));const taskId=(structure.activities||[]).find(a=>a.id===detail.activityId)?.task_id;if(taskId){applyTaskVisualStatus(taskId,deriveTaskStatus(taskId));syncedTasks.delete(taskId);void syncTaskStatus(taskId);}decorateInspector();}}) as EventListener);
 }
