@@ -2,29 +2,35 @@ import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { ProjectActivitiesView } from './ProjectActivitiesView';
 
-type Activity={id:string;task_id:string;title:string};
+type Activity={id:string;task_id:string;title:string;activity_type?:string};
 type Structure={activities?:Activity[]};
 type Meta={activity_id:string;governing_documents?:unknown[];applicability?:string};
+type TaskActivity={id:string;done?:boolean};
+type TaskResponse={tasks?:Array<{activities?:TaskActivity[]}>};
 
 let currentProjectId='';
 let structure:Structure={};
 let metadata=new Map<string,Meta>();
+let doneByActivity=new Map<string,boolean>();
 let overlayRoot:Root|null=null;
 let observer:MutationObserver|null=null;
 let refreshTimer=0;
 
 function norm(v:string){return v.trim().toLocaleLowerCase('sv-SE')}
+function isControlActivity(activity:Activity){return ['approval','control','check','measurement'].includes(String(activity.activity_type||'').toLowerCase())}
 
 async function loadContext(projectId:string){
   if(!projectId)return;
   currentProjectId=projectId;
   try{
-    const [sr,mr]=await Promise.all([
+    const [sr,mr,tr]=await Promise.all([
       fetch(`/api/studio/structure?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
-      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
+      fetch(`/api/project-field-metadata?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),
+      fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})
     ]);
     if(sr.ok)structure=await sr.json() as Structure;
     if(mr.ok){const data=await mr.json() as {items?:Meta[]};metadata=new Map((data.items||[]).map(x=>[x.activity_id,x]));}
+    if(tr.ok){const data=await tr.json() as TaskResponse;doneByActivity=new Map((data.tasks||[]).flatMap(t=>(t.activities||[]).map(a=>[a.id,Boolean(a.done)] as const)));}
   }catch{}
   decorateInspector();
 }
@@ -68,12 +74,24 @@ function decorateInspector(){
     row.dataset.activityId=activity.id;
     row.classList.add('graphActivityRowInteractive');
     row.setAttribute('role','button');row.setAttribute('tabindex','0');
+
+    const status=row.querySelector<HTMLElement>(':scope > span:first-child');
+    const isDone=doneByActivity.get(activity.id)===true;
+    if(status){
+      status.classList.toggle('graphActivityDone',isDone);
+      status.classList.toggle('graphActivityControl',!isDone&&isControlActivity(activity));
+      status.textContent=isDone?'✓':isControlActivity(activity)?'◆':'○';
+      status.title=isDone?'Aktiviteten är klar':isControlActivity(activity)?'Kontroll-/mätningsaktivitet':'Arbetsaktivitet';
+    }
+
     const meta=metadata.get(activity.id);const count=meta?.applicability==='deprecated'?0:(meta?.governing_documents||[]).length;
     let badge=row.querySelector<HTMLElement>('.graphActivityGoverningBadge');
     if(count>0){
-      if(!badge){badge=document.createElement('span');badge.className='graphActivityGoverningBadge';row.appendChild(badge);}
-      badge.textContent=`📋 ${count}`;badge.title=`${count} koppling${count===1?'':'ar'} till styrdokument`;
+      if(!badge){badge=document.createElement('span');badge.className='graphActivityGoverningBadge';const heading=row.querySelector('b');heading?.insertAdjacentElement('afterend',badge);}
+      badge.textContent='📋';badge.title=`${count} koppling${count===1?'':'ar'} till styrdokument`;
+      badge.setAttribute('aria-label',`${count} koppling${count===1?'':'ar'} till styrdokument`);
     }else badge?.remove();
+
     if(row.dataset.overlayBound!=='1'){
       row.dataset.overlayBound='1';
       row.addEventListener('click',()=>openOverlay(activity.id));
@@ -85,7 +103,7 @@ function decorateInspector(){
 function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(decorateInspector,30)}
 
 export function installGraphActivityOverlay(){
-  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV1';if(w[marker])return;w[marker]=true;
+  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV2';if(w[marker])return;w[marker]=true;
   const originalFetch=window.fetch.bind(window);
   window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const response=await originalFetch(input,init);
@@ -101,4 +119,5 @@ export function installGraphActivityOverlay(){
   }) as typeof window.fetch;
   observer=new MutationObserver(scheduleDecorate);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlayRoot)closeOverlay()});
+  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));decorateInspector();}}) as EventListener);
 }
