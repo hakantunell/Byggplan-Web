@@ -3,10 +3,12 @@ import { createRoot, type Root } from 'react-dom/client';
 import { ProjectActivitiesView } from './ProjectActivitiesView';
 
 type Activity={id:string;task_id:string;title:string;activity_type?:string};
-type Structure={activities?:Activity[]};
+type StructureTask={id:string;title:string};
+type Structure={activities?:Activity[];tasks?:StructureTask[]};
 type Meta={activity_id:string;governing_documents?:unknown[];applicability?:string};
 type TaskActivity={id:string;done?:boolean};
 type TaskResponse={tasks?:Array<{id:string;status?:string;activities?:TaskActivity[]}>};
+type DependencyMap=Record<string,string[]>;
 
 let currentProjectId='';
 let structure:Structure={};
@@ -18,10 +20,12 @@ let observer:MutationObserver|null=null;
 let refreshTimer=0;
 let transportFetch:typeof window.fetch=window.fetch.bind(window);
 const syncedTasks=new Set<string>();
+const DEP_PREFIX='byggplan.graph.dependencies.v5.';
 
 function norm(v:string){return v.trim().toLocaleLowerCase('sv-SE')}
 function isControlActivity(activity:Activity){return ['approval','control','check','measurement'].includes(String(activity.activity_type||'').toLowerCase())}
 function isMomentActivity(id:string){const applicability=metadata.get(id)?.applicability;return applicability!=='deprecated'&&applicability!=='project_condition'}
+function readDependencies():DependencyMap{try{return JSON.parse(localStorage.getItem(`${DEP_PREFIX}${currentProjectId}`)||'{}') as DependencyMap}catch{return{}}}
 
 function applyTaskVisualStatus(taskId:string,status:string){
   const node=document.querySelector<HTMLElement>(`.dependencyGraphNode[data-node-id="${CSS.escape(taskId)}"]`);
@@ -36,10 +40,36 @@ function deriveTaskStatus(taskId:string){
   return done===activities.length?'done':done>0?'active':'todo';
 }
 
+function taskHasStarted(taskId:string){
+  const activities=(structure.activities||[]).filter(a=>a.task_id===taskId&&isMomentActivity(a.id));
+  if(activities.some(a=>doneByActivity.get(a.id)===true))return true;
+  const status=deriveTaskStatus(taskId);
+  return status==='active'||status==='done';
+}
+
+function incompletePredecessors(taskId:string){
+  const deps=readDependencies();const missing=new Set<string>();const visited=new Set<string>();
+  const walk=(id:string)=>{for(const parent of deps[id]||[]){if(visited.has(parent))continue;visited.add(parent);if(deriveTaskStatus(parent)!=='done')missing.add(parent);walk(parent);}};
+  walk(taskId);return [...missing];
+}
+
+function decorateDependencyWarnings(){
+  const titles=new Map((structure.tasks||[]).map(t=>[t.id,t.title]));
+  for(const node of Array.from(document.querySelectorAll<HTMLElement>('.dependencyGraphNode[data-node-id]'))){
+    const taskId=node.dataset.nodeId||'';let badge=node.querySelector<HTMLElement>('.graphDependencyWarning');
+    const missing=taskId&&taskHasStarted(taskId)?incompletePredecessors(taskId):[];
+    if(!missing.length){badge?.remove();continue;}
+    if(!badge){badge=document.createElement('span');badge.className='graphDependencyWarning';badge.textContent='⚠';node.appendChild(badge);}
+    const names=missing.map(id=>titles.get(id)||'Tidigare moment').slice(0,5);const extra=missing.length>5?` +${missing.length-5} till`:'';
+    badge.title=`Påbörjat innan föregående moment är klara: ${names.join(', ')}${extra}`;
+    badge.setAttribute('aria-label',badge.title);
+  }
+}
+
 async function syncTaskStatus(taskId:string){
   if(!taskId||syncedTasks.has(taskId))return;
   syncedTasks.add(taskId);
-  try{const r=await transportFetch(`/api/studio/tasks/${encodeURIComponent(taskId)}/sync-status`,{method:'PUT'});if(!r.ok)return;const d=await r.json() as {status?:string};if(d.status){taskStatusById.set(taskId,d.status);applyTaskVisualStatus(taskId,d.status);window.dispatchEvent(new CustomEvent('byggplan:task-status-changed',{detail:{taskId,status:d.status,projectId:currentProjectId}}));}}catch{}
+  try{const r=await transportFetch(`/api/studio/tasks/${encodeURIComponent(taskId)}/sync-status`,{method:'PUT'});if(!r.ok)return;const d=await r.json() as {status?:string};if(d.status){taskStatusById.set(taskId,d.status);applyTaskVisualStatus(taskId,d.status);decorateDependencyWarnings();window.dispatchEvent(new CustomEvent('byggplan:task-status-changed',{detail:{taskId,status:d.status,projectId:currentProjectId}}));}}catch{}
 }
 
 async function loadContext(projectId:string){
@@ -55,7 +85,7 @@ async function loadContext(projectId:string){
     if(mr.ok){const data=await mr.json() as {items?:Meta[]};metadata=new Map((data.items||[]).map(x=>[x.activity_id,x]));}
     if(tr.ok){const data=await tr.json() as TaskResponse;doneByActivity=new Map((data.tasks||[]).flatMap(t=>(t.activities||[]).map(a=>[a.id,Boolean(a.done)] as const)));taskStatusById=new Map((data.tasks||[]).map(t=>[t.id,String(t.status||'todo')]));}
   }catch{}
-  decorateInspector();
+  decorateInspector();decorateDependencyWarnings();
 }
 
 function ensureOverlayHost(){
@@ -85,6 +115,7 @@ function openOverlay(activityId:string){
 function selectedTaskId(){return document.querySelector<HTMLElement>('.dependencyGraphNode.selected[data-node-id]')?.dataset.nodeId||''}
 
 function decorateInspector(){
+  decorateDependencyWarnings();
   const taskId=selectedTaskId();
   const box=document.querySelector<HTMLElement>('.graphActivities');
   if(!taskId||!box)return;
@@ -124,10 +155,10 @@ function decorateInspector(){
   }
 }
 
-function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(decorateInspector,30)}
+function scheduleDecorate(){window.clearTimeout(refreshTimer);refreshTimer=window.setTimeout(()=>{decorateInspector();decorateDependencyWarnings();},30)}
 
 export function installGraphActivityOverlay(){
-  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV5';if(w[marker])return;w[marker]=true;
+  const w=window as typeof window&Record<string,unknown>;const marker='__byggplanGraphActivityOverlayV6';if(w[marker])return;w[marker]=true;
   transportFetch=window.fetch.bind(window);
   const originalFetch=transportFetch;
   window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
@@ -144,5 +175,6 @@ export function installGraphActivityOverlay(){
   }) as typeof window.fetch;
   observer=new MutationObserver(scheduleDecorate);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlayRoot)closeOverlay()});
-  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));const taskId=(structure.activities||[]).find(a=>a.id===detail.activityId)?.task_id;if(taskId){applyTaskVisualStatus(taskId,deriveTaskStatus(taskId));syncedTasks.delete(taskId);void syncTaskStatus(taskId);}decorateInspector();}}) as EventListener);
+  window.addEventListener('byggplan:activity-status-changed',((event:Event)=>{const detail=(event as CustomEvent<{activityId?:string;done?:boolean;projectId?:string}>).detail;if(detail?.activityId){doneByActivity.set(detail.activityId,Boolean(detail.done));const taskId=(structure.activities||[]).find(a=>a.id===detail.activityId)?.task_id;if(taskId){applyTaskVisualStatus(taskId,deriveTaskStatus(taskId));syncedTasks.delete(taskId);void syncTaskStatus(taskId);}decorateInspector();decorateDependencyWarnings();}}) as EventListener);
+  window.addEventListener('storage',e=>{if(e.key===`${DEP_PREFIX}${currentProjectId}`)decorateDependencyWarnings()});
 }
