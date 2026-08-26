@@ -31,18 +31,27 @@ export function BuildDocumentationReport({projectId,projectName}:{projectId:stri
   if(loading)return;
   const preview=document.querySelector<HTMLElement>('.buildDocPreview');
   if(!preview)return;
-  let raf=0;
+  let raf=0,lastScrollTop=preview.scrollTop;
   function syncVisibleSection(){
    raf=0;
    const nodes=Array.from(preview.querySelectorAll<HTMLElement>('[data-report-section]'));
    if(!nodes.length)return;
    const frame=preview.getBoundingClientRect();
-   const anchor=frame.top+Math.min(frame.height*.32,220);
+   const currentScrollTop=preview.scrollTop;
+   const scrollingDown=currentScrollTop>=lastScrollTop;
+   lastScrollTop=currentScrollTop;
+   const anchor=frame.top+frame.height*(scrollingDown?.68:.30);
    let candidate=nodes[0];
    for(const node of nodes){
-    const rect=node.getBoundingClientRect();
-    if(rect.top<=anchor)candidate=node;
+    if(node.getBoundingClientRect().top<=anchor)candidate=node;
     else break;
+   }
+   const nearBottom=preview.scrollHeight-currentScrollTop-preview.clientHeight<32;
+   if(nearBottom){
+    for(const node of nodes){
+     if(node.getBoundingClientRect().top<frame.bottom-24)candidate=node;
+     else break;
+    }
    }
    const id=candidate.dataset.reportSection;
    if(id!==undefined)setSelectedSection(id==='__cover__'?'':id);
