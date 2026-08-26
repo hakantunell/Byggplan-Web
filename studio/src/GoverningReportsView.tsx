@@ -32,7 +32,7 @@ function printGoverningReport(title:string){
  const printWindow=window.open('','_blank');
  if(!printWindow){window.print();return}
  const printCss=`
- *{box-sizing:border-box!important}
+ *{box-sizing:border-box!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
  html,body{margin:0!important;padding:0!important;width:auto!important;height:auto!important;overflow:visible!important;background:#fff!important;color:#202428!important;font-family:Arial,sans-serif!important}
  body{font-size:9pt!important;line-height:1.35!important}
  .reportDetail{display:block!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important;overflow:visible!important}
@@ -47,6 +47,7 @@ function printGoverningReport(title:string){
  .reportSummary article{min-width:0!important;border:1px solid #d9dfe2!important;padding:2.5mm 3mm!important}.reportSummary b{display:block!important;font-size:14pt!important}.reportSummary span{font-size:7.5pt!important}
  .reportLegend{display:flex!important;flex-wrap:wrap!important;gap:2mm 5mm!important;border-top:1px solid #e0e4e6!important;border-bottom:1px solid #e0e4e6!important;padding:2mm 0!important;margin:0 0 4mm!important;font-size:7.5pt!important}.reportLegend span{display:inline-flex!important;align-items:center!important;gap:1mm!important}.reportLegend i{width:2mm!important;height:2mm!important;border-radius:50%!important;display:inline-block!important}
  .reportItems{display:block!important;width:100%!important}.reportItem{display:grid!important;grid-template-columns:7mm minmax(0,1fr)!important;width:100%!important;max-width:100%!important;min-width:0!important;border:0!important;border-left:2.5pt solid #dde4e8!important;border-bottom:1px solid #dfe4e7!important;padding:0 0 4mm 3mm!important;margin:0 0 4mm!important;gap:2.5mm!important;break-inside:auto!important;page-break-inside:auto!important;overflow:visible!important}
+ .reportItem.done{border-left-color:#2e9c50!important}.reportItem.done .reportItemState{color:#14823b!important;background:#e8f6ec!important}
  .reportItemState{grid-column:1!important;width:6mm!important;height:6mm!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:8pt!important;border-radius:50%!important;background:#f1f4f5!important}
  .reportItemBody{grid-column:2!important;min-width:0!important;width:100%!important;max-width:100%!important;overflow:visible!important;font-size:8.5pt!important}
  .reportItemTitle{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;margin:0 0 1mm!important}.reportItemTitle span{display:inline!important;margin-right:2mm!important}.reportItemTitle b{display:inline!important;font-size:9pt!important;line-height:1.25!important;overflow-wrap:anywhere!important;word-break:break-word!important}.reportItemTitle em{display:block!important;margin-top:.5mm!important;font-size:7.5pt!important;font-style:normal!important;color:#67757e!important;overflow-wrap:anywhere!important}
