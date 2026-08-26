@@ -29,15 +29,29 @@ export function BuildDocumentationReport({projectId,projectName}:{projectId:stri
  useEffect(()=>{if(!selectedSection&&sections[0]&&!layout.cover?.included)setSelectedSection(sections[0].id)},[sections,selectedSection,layout.cover?.included]);
  useEffect(()=>{
   if(loading)return;
-  const nodes=Array.from(document.querySelectorAll<HTMLElement>('.buildDocPreview [data-report-section]'));
-  if(!nodes.length)return;
-  const observer=new IntersectionObserver(entries=>{
-   const visible=entries.filter(entry=>entry.isIntersecting).sort((a,b)=>Math.abs(a.boundingClientRect.top-window.innerHeight*.28)-Math.abs(b.boundingClientRect.top-window.innerHeight*.28));
-   const id=(visible[0]?.target as HTMLElement|undefined)?.dataset.reportSection;
+  const preview=document.querySelector<HTMLElement>('.buildDocPreview');
+  if(!preview)return;
+  let raf=0;
+  function syncVisibleSection(){
+   raf=0;
+   const nodes=Array.from(preview.querySelectorAll<HTMLElement>('[data-report-section]'));
+   if(!nodes.length)return;
+   const frame=preview.getBoundingClientRect();
+   const anchor=frame.top+Math.min(frame.height*.32,220);
+   let candidate=nodes[0];
+   for(const node of nodes){
+    const rect=node.getBoundingClientRect();
+    if(rect.top<=anchor)candidate=node;
+    else break;
+   }
+   const id=candidate.dataset.reportSection;
    if(id!==undefined)setSelectedSection(id==='__cover__'?'':id);
-  },{root:null,rootMargin:'-18% 0px -68% 0px',threshold:0});
-  nodes.forEach(node=>observer.observe(node));
-  return()=>observer.disconnect();
+  }
+  function onScroll(){if(!raf)raf=window.requestAnimationFrame(syncVisibleSection)}
+  preview.addEventListener('scroll',onScroll,{passive:true});
+  window.addEventListener('resize',onScroll);
+  syncVisibleSection();
+  return()=>{preview.removeEventListener('scroll',onScroll);window.removeEventListener('resize',onScroll);if(raf)window.cancelAnimationFrame(raf)};
  },[loading,sections,layout.sections,layout.cover?.included]);
  const active=sections.find(s=>s.id===selectedSection)||sections[0];
  const updateItem=(key:string,patch:ItemLayout)=>setLayout(cur=>({...cur,items:{...cur.items,[key]:{...cur.items[key],...patch}}}));
