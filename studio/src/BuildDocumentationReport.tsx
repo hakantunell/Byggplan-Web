@@ -34,7 +34,14 @@ export function BuildDocumentationReport({projectId,projectName}:{projectId:stri
   const previewEl:HTMLElement=foundPreview;
   const projectMain=previewEl.closest<HTMLElement>('.projectMain');
   let raf=0;
-  let lastPosition=(projectMain?.scrollTop||0)+previewEl.scrollTop+window.scrollY;
+  function nearBottom(){
+   const previewBottom=previewEl.scrollHeight-previewEl.scrollTop-previewEl.clientHeight<28;
+   const projectBottom=projectMain?projectMain.scrollHeight-projectMain.scrollTop-projectMain.clientHeight<28:false;
+   const pageBottom=document.documentElement.scrollHeight-(window.scrollY+window.innerHeight)<28;
+   const previewRect=previewEl.getBoundingClientRect();
+   const visualBottom=previewRect.bottom<=window.innerHeight+28;
+   return previewBottom||projectBottom||pageBottom||visualBottom;
+  }
   function syncVisibleSection(){
    raf=0;
    const nodes=Array.from(previewEl.querySelectorAll<HTMLElement>('[data-report-section]'));
@@ -43,18 +50,16 @@ export function BuildDocumentationReport({projectId,projectName}:{projectId:stri
    const visibleTop=Math.max(0,frame.top);
    const visibleBottom=Math.min(window.innerHeight,frame.bottom);
    if(visibleBottom<=visibleTop)return;
-   const currentPosition=(projectMain?.scrollTop||0)+previewEl.scrollTop+window.scrollY;
-   const scrollingDown=currentPosition>=lastPosition;
-   lastPosition=currentPosition;
-   const anchor=visibleTop+(visibleBottom-visibleTop)*(scrollingDown?.68:.30);
+   // Keep the current section until the next heading is clearly inside the working area.
+   // This avoids switching just because the next heading peeks into the bottom of the page.
+   const anchor=visibleTop+(visibleBottom-visibleTop)*0.46;
    let candidate=nodes[0];
    for(const node of nodes){
     if(node.getBoundingClientRect().top<=anchor)candidate=node;
     else break;
    }
-   const pageBottom=Math.min(window.innerHeight,frame.bottom);
-   const lastNode=nodes[nodes.length-1];
-   if(scrollingDown&&lastNode.getBoundingClientRect().top<pageBottom-24)candidate=lastNode;
+   // A very short final section still becomes active when the user reaches the actual end.
+   if(nearBottom())candidate=nodes[nodes.length-1];
    const id=candidate.dataset.reportSection;
    if(id)setSelectedSection(id);
   }
