@@ -35,6 +35,7 @@ import './project-workspace-v2.css';
 import './api-browser.css';
 import './governing-import-action.css';
 import './governing-analysis-action.css';
+import './governing-version-action.css';
 import './governing-workspace-nav.css';
 import './governing-mapping-rail.css';
 import './project-utility-rail.css';
