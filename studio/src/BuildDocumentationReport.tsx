@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import './build-documentation-report.css';
 
 type FileItem={id:string;originalName:string;contentType:string;url:string;createdAt?:string};
@@ -20,6 +20,7 @@ function isImage(type?:string|null){return Boolean(type?.startsWith('image/'))}
 
 export function BuildDocumentationReport({projectId,projectName}:{projectId:string;projectName:string}){
  const[evidence,setEvidence]=useState<Evidence[]>([]),[projectInfo,setProjectInfo]=useState<ProjectInformation|null>(null),[layout,setLayout]=useState<Layout>(()=>readLayout(projectId)),[selectedSection,setSelectedSection]=useState(COVER),[loading,setLoading]=useState(true),[error,setError]=useState('');
+ const suspendAutoSelectionUntil=useRef(0);
  useEffect(()=>{setLayout(readLayout(projectId));setSelectedSection(COVER);setLoading(true);setError('');Promise.all([
   fetch(`/api/projects/${encodeURIComponent(projectId)}/activity-documentation-summary`,{cache:'no-store'}).then(async r=>{if(!r.ok)throw new Error('Kunde inte läsa byggdokumentationen.');const d=await r.json() as {items?:Evidence[]};return d.items||[]}),
   fetch(`/api/studio/projects/${encodeURIComponent(projectId)}/information`,{cache:'no-store'}).then(async r=>{if(!r.ok)return null;const d=await r.json() as {information?:ProjectInformation};return d.information||null}).catch(()=>null)
@@ -27,57 +28,60 @@ export function BuildDocumentationReport({projectId,projectName}:{projectId:stri
  useEffect(()=>{try{localStorage.setItem(storageKey(projectId),JSON.stringify(layout))}catch{}},[projectId,layout]);
  const items=useMemo(()=>flatten(evidence),[evidence]);
  const sections=useMemo(()=>{const map=new Map<string,{id:string;name:string;items:ReportItem[]}>();for(const item of items){const current=map.get(item.sectionId)||{id:item.sectionId,name:item.sectionName,items:[]};current.items.push(item);map.set(item.sectionId,current)}return[...map.values()]},[items]);
+
  useEffect(()=>{
   if(loading)return;
-  const foundPreview=document.querySelector<HTMLElement>('.buildDocPreview');
-  if(!foundPreview)return;
-  const previewEl:HTMLElement=foundPreview;
-  const projectMain=previewEl.closest<HTMLElement>('.projectMain');
+  const preview=document.querySelector<HTMLElement>('.buildDocPreview');
+  if(!preview)return;
   let raf=0;
-  function nearBottom(){
-   const previewBottom=previewEl.scrollHeight-previewEl.scrollTop-previewEl.clientHeight<28;
-   const projectBottom=projectMain?projectMain.scrollHeight-projectMain.scrollTop-projectMain.clientHeight<28:false;
-   const pageBottom=document.documentElement.scrollHeight-(window.scrollY+window.innerHeight)<28;
-   const previewRect=previewEl.getBoundingClientRect();
-   const visualBottom=previewRect.bottom<=window.innerHeight+28;
-   return previewBottom||projectBottom||pageBottom||visualBottom;
-  }
   function syncVisibleSection(){
    raf=0;
-   const nodes=Array.from(previewEl.querySelectorAll<HTMLElement>('[data-report-section]'));
+   if(performance.now()<suspendAutoSelectionUntil.current)return;
+   const nodes=Array.from(preview.querySelectorAll<HTMLElement>('[data-report-section]'));
    if(!nodes.length)return;
-   const frame=previewEl.getBoundingClientRect();
-   const visibleTop=Math.max(0,frame.top);
-   const visibleBottom=Math.min(window.innerHeight,frame.bottom);
+   const previewRect=preview.getBoundingClientRect();
+   const visibleTop=Math.max(40,previewRect.top);
+   const visibleBottom=Math.min(window.innerHeight-16,previewRect.bottom);
    if(visibleBottom<=visibleTop)return;
-   // Keep the current section until the next heading is clearly inside the working area.
-   // This avoids switching just because the next heading peeks into the bottom of the page.
-   const anchor=visibleTop+(visibleBottom-visibleTop)*0.46;
-   let candidate=nodes[0];
+   const focusY=visibleTop+(visibleBottom-visibleTop)*0.48;
+   let candidate:HTMLElement|null=null;
+   let nearestDistance=Number.POSITIVE_INFINITY;
    for(const node of nodes){
-    if(node.getBoundingClientRect().top<=anchor)candidate=node;
-    else break;
+    const rect=node.getBoundingClientRect();
+    if(rect.bottom<visibleTop||rect.top>visibleBottom)continue;
+    if(rect.top<=focusY&&rect.bottom>=focusY){candidate=node;break}
+    const distance=focusY<rect.top?rect.top-focusY:focusY-rect.bottom;
+    if(distance<nearestDistance){nearestDistance=distance;candidate=node}
    }
-   // A very short final section still becomes active when the user reaches the actual end.
-   if(nearBottom())candidate=nodes[nodes.length-1];
+   if(!candidate)return;
+   const lastNode=nodes[nodes.length-1];
+   const lastRect=lastNode.getBoundingClientRect();
+   if(lastRect.bottom<=visibleBottom+8&&lastRect.top<visibleBottom-24)candidate=lastNode;
    const id=candidate.dataset.reportSection;
-   if(id)setSelectedSection(id);
+   if(id)setSelectedSection(current=>current===id?current:id);
   }
   function onScroll(){if(!raf)raf=window.requestAnimationFrame(syncVisibleSection)}
-  previewEl.addEventListener('scroll',onScroll,{passive:true});
-  projectMain?.addEventListener('scroll',onScroll,{passive:true});
-  window.addEventListener('scroll',onScroll,{passive:true,capture:true});
+  document.addEventListener('scroll',onScroll,true);
   window.addEventListener('resize',onScroll);
   syncVisibleSection();
-  return()=>{previewEl.removeEventListener('scroll',onScroll);projectMain?.removeEventListener('scroll',onScroll);window.removeEventListener('scroll',onScroll,true);window.removeEventListener('resize',onScroll);if(raf)window.cancelAnimationFrame(raf)};
+  return()=>{document.removeEventListener('scroll',onScroll,true);window.removeEventListener('resize',onScroll);if(raf)window.cancelAnimationFrame(raf)};
  },[loading,sections,layout.sections,layout.cover?.included]);
+
  const active=sections.find(s=>s.id===selectedSection)||sections[0];
  const updateItem=(key:string,patch:ItemLayout)=>setLayout(cur=>({...cur,items:{...cur.items,[key]:{...cur.items[key],...patch}}}));
  const updateSection=(id:string,patch:SectionLayout)=>setLayout(cur=>({...cur,sections:{...cur.sections,[id]:{...cur.sections[id],...patch}}}));
  const updateCover=(patch:CoverLayout)=>setLayout(cur=>({...cur,cover:{...cur.cover,...patch}}));
  const included=(item:ReportItem)=>layout.items[item.key]?.included!==false;
  const coverIncluded=layout.cover?.included!==false;
- function selectAndScroll(id:string){setSelectedSection(id);window.requestAnimationFrame(()=>{document.querySelector<HTMLElement>(`.buildDocPreview [data-report-section="${CSS.escape(id)}"]`)?.scrollIntoView({behavior:'smooth',block:'start'})})}
+ function selectAndScroll(id:string){
+  suspendAutoSelectionUntil.current=performance.now()+250;
+  setSelectedSection(id);
+  window.requestAnimationFrame(()=>{
+   const target=document.querySelector<HTMLElement>(`.buildDocPreview [data-report-section="${CSS.escape(id)}"]`);
+   if(target)target.scrollIntoView({behavior:'auto',block:'center'});
+   window.setTimeout(()=>{suspendAutoSelectionUntil.current=0;window.dispatchEvent(new Event('resize'))},280);
+  });
+ }
  if(loading)return <div className="workspaceEmpty">Bygger byggdokumentation…</div>;
  if(error)return <div className="reportMessage">⚠ {error}</div>;
  return <div className="buildDocReport projectPage"><div className="pageHero buildDocHero"><div><small>RAPPORTER</small><h1>Byggdokumentation</h1><p>Egen dokumentation över hur huset är byggt. Rapportval och layout påverkar inte originalmaterialet på aktiviteterna.</p></div><button className="primary" onClick={()=>window.print()}>🖨 Skriv ut / PDF</button></div>{sections.length===0?<section className="infoCard">Det finns ännu ingen egen dokumentation att sammanställa.</section>:<div className="buildDocEditor"><aside className="buildDocOutline"><h3>Innehåll</h3><button className={selectedSection===COVER?'selected':''} onClick={()=>selectAndScroll(COVER)}><b>Försättsblad</b><small>{coverIncluded?'med i rapporten':'dolt – klicka för att återställa'}</small></button>{sections.map(section=>{const visible=section.items.filter(included).length;const hidden=section.items.length-visible;return <button key={section.id} className={selectedSection===section.id?'selected':''} onClick={()=>selectAndScroll(section.id)}><b>{layout.sections[section.id]?.title||section.name}</b><small>{visible} med · {hidden} dolda</small></button>})}</aside><main className="buildDocPreview">{coverIncluded&&<div className="paper coverPage" data-report-section={COVER}><div className="coverBrand">ByggPlan</div><div className="coverMain"><small>BYGGDOKUMENTATION</small><h1>{projectInfo?.projectName||projectName}</h1>{layout.cover?.subtitle&&<p>{layout.cover.subtitle}</p>}</div><div className="coverFacts">{projectInfo?.propertyDesignation&&<div><span>Fastighetsbeteckning</span><b>{projectInfo.propertyDesignation}</b></div>}{projectInfo?.address&&<div><span>Adress</span><b>{projectInfo.address}</b></div>}{projectInfo?.municipality&&<div><span>Kommun</span><b>{projectInfo.municipality}</b></div>}{projectInfo?.caseNumber&&<div><span>Ärendenummer</span><b>{projectInfo.caseNumber}</b></div>}</div><div className="coverFooter"><span>Sammanställd {new Date().toLocaleDateString('sv-SE')}</span></div></div>}<div className="paper contentPaper"><header className="paperHeader"><span>Byggdokumentation</span><b>{projectName}</b></header>{sections.filter(s=>!layout.sections[s.id]?.hidden).map(section=><section key={section.id} className="paperSection" data-report-section={section.id}><h2>{layout.sections[section.id]?.title||section.name}</h2>{groupByActivity(section.items.filter(included)).map(group=><div className="paperActivity" key={group.activityId}><h3>{group.activityTitle}</h3><small>{group.taskTitle}</small>{group.items.filter(i=>i.kind==='note').map(i=><p key={i.key}>{i.value}</p>)}<div className="paperValues">{group.items.filter(i=>i.kind==='value').map(i=><span key={i.key}><b>{i.label}:</b> {i.value}</span>)}</div><div className="paperImages">{group.items.filter(i=>i.kind==='image').map(i=>{const settings=layout.items[i.key]||{};return <figure key={i.key} className={`size-${settings.size||'half'}`}><img src={i.url} alt={settings.caption||i.originalName||i.label}/><figcaption>{settings.caption||i.label||i.originalName}</figcaption></figure>})}</div></div>)}</section>)}</div></main><aside className="buildDocMaterial">{selectedSection===COVER?<><div className="materialHeading"><div><small>FÖRSÄTTSBLAD</small><b>Projektuppgifter</b></div><label><input type="checkbox" checked={coverIncluded} onChange={e=>updateCover({included:e.target.checked})}/> Visa försättsblad</label></div><label className="coverEditorField"><span>Underrubrik</span><input value={layout.cover?.subtitle||''} onChange={e=>updateCover({subtitle:e.target.value})}/></label><div className="coverInfoPreview"><small>Hämtas från Projektinformation</small>{projectInfo?.propertyDesignation&&<p><b>Fastighet:</b> {projectInfo.propertyDesignation}</p>}{projectInfo?.address&&<p><b>Adress:</b> {projectInfo.address}</p>}{projectInfo?.municipality&&<p><b>Kommun:</b> {projectInfo.municipality}</p>}{projectInfo?.caseNumber&&<p><b>Ärendenummer:</b> {projectInfo.caseNumber}</p>}</div></>:active&&<><div className="materialHeading"><div><small>AVSNITT</small><input value={layout.sections[active.id]?.title??active.name} onChange={e=>updateSection(active.id,{title:e.target.value})}/></div><label><input type="checkbox" checked={!layout.sections[active.id]?.hidden} onChange={e=>updateSection(active.id,{hidden:!e.target.checked})}/> Visa avsnitt</label></div><h3>Material</h3>{active.items.map(item=>{const settings=layout.items[item.key]||{};const show=included(item);return <article key={item.key} className={show?'':'excluded'}>{item.kind==='image'&&item.url?<img src={item.url} alt=""/>:<div className="materialType">{item.kind==='note'?'T':item.kind==='value'?'#':'□'}</div>}<div className="materialBody"><b>{item.kind==='image'?(settings.caption||item.originalName||item.label):item.label}</b>{item.value&&<small>{item.value}</small>}<label><input type="checkbox" checked={show} onChange={e=>updateItem(item.key,{included:e.target.checked})}/> Med i rapport</label>{item.kind==='image'&&show&&<><select value={settings.size||'half'} onChange={e=>updateItem(item.key,{size:e.target.value as ItemLayout['size']})}><option value="large">Stor</option><option value="half">Halv</option><option value="third">Tredjedel</option></select><input className="captionInput" placeholder="Bildtext" value={settings.caption||''} onChange={e=>updateItem(item.key,{caption:e.target.value})}/></>}</div></article>})}</>}</aside></div>}</div>
