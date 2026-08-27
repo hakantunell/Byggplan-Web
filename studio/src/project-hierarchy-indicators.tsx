@@ -14,6 +14,7 @@ export function ProjectHierarchyIndicators() {
     let tasks: Task[] = [];
     let metadata = new Map<string, Meta>();
     const governed = new Map<string, Set<string>>();
+    const consolidatedV24 = new Set<string>();
     const pathKey = (...parts: string[]) => parts.join('›');
 
     function addGovernedActivity(path: string, activityId: string) {
@@ -39,6 +40,10 @@ export function ProjectHierarchyIndicators() {
 
     async function load(id: string) {
       try {
+        if (!consolidatedV24.has(id)) {
+          const cleanup = await fetch(`/api/studio/projects/${encodeURIComponent(id)}/structure-consolidate-v24`, { method: 'POST' });
+          if (cleanup.ok) consolidatedV24.add(id);
+        }
         const cacheBust = Date.now().toString(36);
         const [tasksResponse, metadataResponse] = await Promise.all([
           fetch(`/api/tasks?projectId=${encodeURIComponent(id)}&__hier=${cacheBust}`, { cache: 'no-store' }),
