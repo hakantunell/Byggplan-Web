@@ -21,7 +21,33 @@ export function GoverningDocumentVersionAction({projectId}:{projectId:string}){
  function close(){if(busy)return;setOpen(false);setReviewVersion(null);setDraft([]);setComparison(null);setFile(null);setVersionLabel('');setNote('');setMessage('')}
  async function upload(){if(!selected||!file||busy)return;setBusy(true);setMessage('Laddar upp ny version som kandidat…');try{if(file.size>25*1024*1024)throw new Error('Filen får vara högst 25 MB.');const form=new FormData();form.append('file',file,file.name);form.append('versionLabel',versionLabel.trim());form.append('note',note.trim());const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates`,{method:'POST',body:form});const d=await r.json().catch(()=>({})) as {error?:string;candidate?:{versionLabel?:string}};if(!r.ok)throw new Error(d.error||'Kunde inte spara kandidatversionen.');setMessage(`${d.candidate?.versionLabel||'Den nya versionen'} är sparad som kandidat. Ingenting i projektet eller befintliga aktiviteter har ändrats.`);setFile(null);setVersionLabel('');setNote('');await loadVersions(selected.id)}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte spara kandidatversionen.')}finally{setBusy(false)}}
  async function removeCandidate(version:VersionRow){if(!selected||busy||version.status!=='candidate')return;if(!window.confirm(`Ta bort kandidatversionen ”${version.version_label}”? Den aktiva versionen påverkas inte.`))return;setBusy(true);try{const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates/${encodeURIComponent(version.id)}`,{method:'DELETE'});const d=await r.json().catch(()=>({})) as {error?:string};if(!r.ok)throw new Error(d.error||'Kunde inte ta bort kandidatversionen.');setMessage('Kandidatversionen togs bort.');await loadVersions(selected.id)}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte ta bort kandidatversionen.')}finally{setBusy(false)}}
- async function startReview(version:VersionRow){if(!selected||busy)return;setBusy(true);setMessage('Förbereder säker jämförelse…');try{const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates/${encodeURIComponent(version.id)}/prepare-comparison`,{method:'POST'});let d=await r.json().catch(()=>({})) as Comparison&{error?:string;message?:string};if(!r.ok)throw new Error(d.error||'Kunde inte förbereda jämförelsen.');if(!Number(version.comparison_item_count||0)){const reviewed=reviewedCandidateFor(selected,(d.items||[]).map(normalizeDraft));if(reviewed){const rr=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates/${encodeURIComponent(version.id)}/comparison-draft`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:reviewed})});const rd=await rr.json().catch(()=>({})) as Comparison&{error?:string};if(!rr.ok)throw new Error(rd.error||'Kunde inte lägga in den granskade nya kontrollplanen.');d={...rd,message:'Den nya kontrollplanens granskade struktur har lagts in som jämförelseutkast. Kontrollera särskilt nya och ändrade punkter innan något aktiveras.'}}setReviewVersion(version);setDraft((d.items||[]).map(normalizeDraft));setComparison({items:d.items||[],changes:d.changes||[],summary:d.summary});setMessage(d.message||'Jämförelsen är klar för granskning.')}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte förbereda jämförelsen.')}finally{setBusy(false)}}
+ async function startReview(version:VersionRow){
+  if(!selected||busy)return;
+  setBusy(true);
+  setMessage('Förbereder säker jämförelse…');
+  try{
+   const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates/${encodeURIComponent(version.id)}/prepare-comparison`,{method:'POST'});
+   let d=await r.json().catch(()=>({})) as Comparison&{error?:string;message?:string};
+   if(!r.ok)throw new Error(d.error||'Kunde inte förbereda jämförelsen.');
+   if(!Number(version.comparison_item_count||0)){
+    const reviewed=reviewedCandidateFor(selected,(d.items||[]).map(normalizeDraft));
+    if(reviewed){
+     const rr=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/version-candidates/${encodeURIComponent(version.id)}/comparison-draft`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:reviewed})});
+     const rd=await rr.json().catch(()=>({})) as Comparison&{error?:string};
+     if(!rr.ok)throw new Error(rd.error||'Kunde inte lägga in den granskade nya kontrollplanen.');
+     d={...rd,message:'Den nya kontrollplanens granskade struktur har lagts in som jämförelseutkast. Kontrollera särskilt nya och ändrade punkter innan något aktiveras.'};
+    }
+   }
+   setReviewVersion(version);
+   setDraft((d.items||[]).map(normalizeDraft));
+   setComparison({items:d.items||[],changes:d.changes||[],summary:d.summary});
+   setMessage(d.message||'Jämförelsen är klar för granskning.');
+  }catch(e){
+   setMessage(e instanceof Error?e.message:'Kunde inte förbereda jämförelsen.');
+  }finally{
+   setBusy(false);
+  }
+ }
  function updateDraft(index:number,field:keyof DraftItem,value:string){setDraft(current=>current.map((item,i)=>i===index?{...item,[field]:value}:item))}
  function removeDraft(index:number){const item=draft[index];const warning=item?.source_item_id&&comparison?.changes.find(c=>c.sourceItemId===item.source_item_id&&(c.performed||c.documented));if(warning&&!window.confirm('Den här styrpunkten är kopplad till redan utförd eller dokumenterad aktivitet. Den tas bara bort ur jämförelseutkastet nu; ingen aktivitet eller dokumentation raderas. Fortsätta?'))return;setDraft(current=>current.filter((_,i)=>i!==index))}
  function addDraft(){setDraft(current=>[...current,{code:'',description:'Ny styrpunkt',section_code:'',section_title:'',item_type:'control',responsible_role:'',evidence_required:'',source_note:''}])}
