@@ -2,125 +2,117 @@ type MoveActivity={id:string;title:string};
 type MoveTask={id:string;workArea:string;workSection:string;title:string;status:string;activities:MoveActivity[]};
 
 const PROJECT_STORAGE_KEY='byggplan.studio.projectId';
-
-function normalized(value:string|undefined|null){return (value||'').replace(/\s+/g,' ').trim()}
+const NORMALIZE=(value:string|undefined|null)=>(value||'').replace(/\s+/g,' ').trim();
 
 export function installActivityMoveBridge(){
- let activeDialog:HTMLElement|null=null;
+ let tasks:MoveTask[]=[];
+ let loadedProjectId='';
+ let loading:Promise<void>|null=null;
+ let dragged:{activityId:string;taskId:string}|null=null;
+ let syncTimer:number|undefined;
 
- const sync=()=>{
-  document.querySelectorAll<HTMLElement>('.activityEditor').forEach(editor=>{
-   if(editor.querySelector('.studioActivityMoveButton'))return;
-   const save=Array.from(editor.querySelectorAll<HTMLButtonElement>('button')).find(button=>normalized(button.textContent).includes('Spara ändringar'));
-   if(!save)return;
-   const move=document.createElement('button');
-   move.type='button';
-   move.className='studioActivityMoveButton';
-   move.textContent='↪ Flytta aktivitet';
-   move.addEventListener('click',()=>void openMoveDialog(editor));
-   save.insertAdjacentElement('afterend',move);
-  });
- };
-
- const observer=new MutationObserver(sync);
- observer.observe(document.documentElement,{childList:true,subtree:true});
- sync();
-
- async function openMoveDialog(editor:HTMLElement){
+ async function ensureTasks(){
   const projectId=localStorage.getItem(PROJECT_STORAGE_KEY)||'';
-  if(!projectId){window.alert('Inget projekt är valt.');return}
-  const response=await fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'});
-  const data=await response.json().catch(()=>({})) as {tasks?:MoveTask[];error?:string};
-  if(!response.ok){window.alert(data.error||'Kunde inte läsa projektstrukturen.');return}
-  const tasks=data.tasks||[];
-  const title=normalized(editor.querySelector('h3')?.textContent);
-  const path=normalized(editor.querySelector('.activityPath')?.textContent);
-  const candidates=tasks.flatMap(task=>(task.activities||[]).map(activity=>({activity,task,path:normalized(`${task.workArea} › ${task.workSection} › ${task.title}`)})));
-  const current=candidates.find(item=>normalized(item.activity.title)===title&&item.path===path) || candidates.find(item=>normalized(item.activity.title)===title);
-  if(!current){window.alert('Kunde inte identifiera aktiviteten. Uppdatera sidan och försök igen.');return}
-
-  activeDialog?.remove();
-  const overlay=document.createElement('div');
-  overlay.className='studioMoveOverlay';
-  overlay.setAttribute('role','presentation');
-  const dialog=document.createElement('section');
-  dialog.className='studioMoveDialog';
-  dialog.setAttribute('role','dialog');
-  dialog.setAttribute('aria-modal','true');
-  dialog.setAttribute('aria-label','Flytta aktivitet');
-  overlay.append(dialog);
-  activeDialog=overlay;
-
-  let selectedTaskId='';
-  const header=document.createElement('header');
-  const headerText=document.createElement('div');
-  const eyebrow=document.createElement('small');eyebrow.textContent='FLYTTA AKTIVITET';
-  const heading=document.createElement('h2');heading.textContent=current.activity.title;
-  const from=document.createElement('p');from.textContent=`Nuvarande plats: ${current.path}`;
-  headerText.append(eyebrow,heading,from);
-  const close=document.createElement('button');close.type='button';close.className='studioMoveClose';close.setAttribute('aria-label','Stäng');close.textContent='×';close.addEventListener('click',()=>dismiss());
-  header.append(headerText,close);
-  dialog.append(header);
-
-  const intro=document.createElement('p');intro.className='studioMoveIntro';intro.textContent='Välj det moment som aktiviteten ska flyttas till.';dialog.append(intro);
-  const tree=document.createElement('div');tree.className='studioMoveTree';dialog.append(tree);
-
-  const footer=document.createElement('footer');
-  const error=document.createElement('div');error.className='studioMoveError';error.setAttribute('aria-live','polite');
-  const footerButtons=document.createElement('div');
-  const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Avbryt';cancel.addEventListener('click',()=>dismiss());
-  const confirm=document.createElement('button');confirm.type='button';confirm.className='primary';confirm.textContent='Flytta hit';confirm.disabled=true;
-  footerButtons.append(cancel,confirm);footer.append(error,footerButtons);dialog.append(footer);
-
-  const areas=new Map<string,Map<string,MoveTask[]>>();
-  for(const task of tasks){
-   const area=task.workArea||'Övrigt';const section=task.workSection||'Övrigt';
-   if(!areas.has(area))areas.set(area,new Map());
-   const sections=areas.get(area)!;if(!sections.has(section))sections.set(section,[]);sections.get(section)!.push(task);
-  }
-  for(const[areaName,sections]of areas){
-   const area=document.createElement('details');area.className='studioMoveArea';area.open=true;
-   const areaSummary=document.createElement('summary');areaSummary.textContent=areaName;area.append(areaSummary);
-   for(const[sectionName,sectionTasks]of sections){
-    const section=document.createElement('details');section.className='studioMoveSection';section.open=sectionTasks.some(task=>task.id===current.task.id);
-    const sectionSummary=document.createElement('summary');sectionSummary.textContent=sectionName;section.append(sectionSummary);
-    const moments=document.createElement('div');moments.className='studioMoveMoments';
-    for(const task of sectionTasks){
-     const button=document.createElement('button');button.type='button';button.className='studioMoveMoment';
-     const label=document.createElement('span');label.textContent=task.title;button.append(label);
-     if(task.id===current.task.id){button.disabled=true;button.classList.add('current');const badge=document.createElement('small');badge.textContent='Nuvarande';button.append(badge)}
-     else{
-      button.addEventListener('click',()=>{
-       selectedTaskId=task.id;
-       tree.querySelectorAll('.studioMoveMoment.selected').forEach(node=>node.classList.remove('selected'));
-       button.classList.add('selected');confirm.disabled=false;error.textContent='';
-      });
-     }
-     moments.append(button);
-    }
-    section.append(moments);area.append(section);
-   }
-   tree.append(area);
-  }
-
-  confirm.addEventListener('click',async()=>{
-   if(!selectedTaskId)return;
-   confirm.disabled=true;cancel.disabled=true;error.textContent='Flyttar…';
+  if(!projectId){tasks=[];loadedProjectId='';return}
+  if(projectId===loadedProjectId&&tasks.length)return;
+  if(loading)return loading;
+  loading=(async()=>{
    try{
-    const r=await fetch(`/api/activities/${encodeURIComponent(current.activity.id)}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetTaskId:selectedTaskId})});
-    const d=await r.json().catch(()=>({})) as {error?:string};
-    if(!r.ok)throw new Error(d.error||'Aktiviteten kunde inte flyttas.');
-    error.textContent='Aktiviteten är flyttad.';
+    const response=await fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'});
+    const data=await response.json().catch(()=>({})) as {tasks?:MoveTask[]};
+    if(!response.ok)throw new Error('Kunde inte läsa projektstrukturen.');
+    tasks=data.tasks||[];loadedProjectId=projectId;
+   }catch{tasks=[];loadedProjectId=''}finally{loading=null}
+  })();
+  return loading;
+ }
+
+ function label(row:HTMLElement|null){return NORMALIZE(row?.querySelector<HTMLElement>('.projectTreeLabel')?.textContent)}
+ function rowDepth(row:HTMLElement){return Math.round((parseInt(row.style.paddingLeft||'0',10)-10)/16)}
+
+ function resolveTask(row:HTMLElement){
+  const taskWrapper=row.parentElement;
+  const sectionWrapper=taskWrapper?.parentElement;
+  const areaWrapper=sectionWrapper?.parentElement;
+  const taskTitle=label(row);
+  const sectionTitle=label(sectionWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
+  const areaTitle=label(areaWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
+  return tasks.find(task=>NORMALIZE(task.title)===taskTitle&&NORMALIZE(task.workSection)===sectionTitle&&NORMALIZE(task.workArea)===areaTitle)||null;
+ }
+
+ function bindRows(){
+  const workspace=document.querySelector<HTMLElement>('.projectWorkspace');
+  const editMode=Boolean(workspace?.classList.contains('editMode'));
+  const rows=Array.from(document.querySelectorAll<HTMLElement>('.projectWorkspace .projectTreeRow'));
+  for(const row of rows){
+   row.draggable=false;
+   row.classList.remove('activityTreeDraggable','activityTreeDropTarget','activityTreeDropHover','activityTreeDragging');
+   delete row.dataset.activityId;delete row.dataset.taskId;
+  }
+  if(!editMode||!tasks.length)return;
+
+  for(const row of rows.filter(item=>rowDepth(item)===3)){
+   const task=resolveTask(row);if(!task)continue;
+   row.dataset.taskId=task.id;row.classList.add('activityTreeDropTarget');
+  }
+  for(const taskRow of rows.filter(item=>rowDepth(item)===3)){
+   const taskId=taskRow.dataset.taskId;if(!taskId)continue;
+   const task=tasks.find(item=>item.id===taskId);if(!task)continue;
+   const wrapper=taskRow.parentElement;if(!wrapper)continue;
+   const activityRows=Array.from(wrapper.children).filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.classList.contains('projectTreeRow')&&rowDepth(node)===4);
+   activityRows.forEach((row,index)=>{
+    const activity=task.activities[index];if(!activity)return;
+    row.dataset.activityId=activity.id;row.dataset.taskId=task.id;row.draggable=true;row.classList.add('activityTreeDraggable');row.title='Dra aktiviteten till ett annat moment';
+   });
+  }
+ }
+
+ async function sync(){
+  await ensureTasks();bindRows();
+ }
+ function scheduleSync(){window.clearTimeout(syncTimer);syncTimer=window.setTimeout(()=>void sync(),40)}
+
+ document.addEventListener('dragstart',event=>{
+  const row=(event.target as HTMLElement|null)?.closest<HTMLElement>('.activityTreeDraggable');
+  if(!row?.dataset.activityId||!row.dataset.taskId)return;
+  dragged={activityId:row.dataset.activityId,taskId:row.dataset.taskId};row.classList.add('activityTreeDragging');
+  event.dataTransfer?.setData('text/plain',row.dataset.activityId);if(event.dataTransfer)event.dataTransfer.effectAllowed='move';
+ });
+ document.addEventListener('dragend',()=>{
+  dragged=null;document.querySelectorAll('.activityTreeDragging,.activityTreeDropHover').forEach(node=>node.classList.remove('activityTreeDragging','activityTreeDropHover'));
+ });
+ document.addEventListener('dragover',event=>{
+  if(!dragged)return;
+  const target=(event.target as HTMLElement|null)?.closest<HTMLElement>('.activityTreeDropTarget');
+  if(!target?.dataset.taskId||target.dataset.taskId===dragged.taskId)return;
+  event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='move';
+  document.querySelectorAll('.activityTreeDropHover').forEach(node=>{if(node!==target)node.classList.remove('activityTreeDropHover')});target.classList.add('activityTreeDropHover');
+ });
+ document.addEventListener('dragleave',event=>{
+  const target=(event.target as HTMLElement|null)?.closest<HTMLElement>('.activityTreeDropTarget');
+  if(target&&!target.contains(event.relatedTarget as Node|null))target.classList.remove('activityTreeDropHover');
+ });
+ document.addEventListener('drop',event=>{
+  if(!dragged)return;
+  const target=(event.target as HTMLElement|null)?.closest<HTMLElement>('.activityTreeDropTarget');
+  if(!target?.dataset.taskId||target.dataset.taskId===dragged.taskId)return;
+  event.preventDefault();target.classList.remove('activityTreeDropHover');
+  const move={...dragged};dragged=null;
+  void (async()=>{
+   try{
+    const response=await fetch(`/api/activities/${encodeURIComponent(move.activityId)}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetTaskId:target.dataset.taskId})});
+    const data=await response.json().catch(()=>({})) as {error?:string};
+    if(!response.ok)throw new Error(data.error||'Aktiviteten kunde inte flyttas.');
+    showMessage('Aktiviteten flyttad');
     window.setTimeout(()=>window.location.reload(),250);
-   }catch(e){error.textContent=e instanceof Error?e.message:'Aktiviteten kunde inte flyttas.';confirm.disabled=false;cancel.disabled=false}
-  });
+   }catch(error){showMessage(error instanceof Error?error.message:'Aktiviteten kunde inte flyttas.',true)}
+  })();
+ });
 
-  overlay.addEventListener('mousedown',event=>{if(event.target===overlay)dismiss()});
-  document.addEventListener('keydown',escapeHandler);
-  document.body.append(overlay);
-  close.focus();
+ const observer=new MutationObserver(scheduleSync);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
+ window.addEventListener('storage',scheduleSync);scheduleSync();
 
-  function escapeHandler(event:KeyboardEvent){if(event.key==='Escape')dismiss()}
-  function dismiss(){document.removeEventListener('keydown',escapeHandler);overlay.remove();if(activeDialog===overlay)activeDialog=null}
+ function showMessage(text:string,error=false){
+  document.querySelector('.activityTreeMoveNotice')?.remove();const note=document.createElement('div');note.className=`activityTreeMoveNotice${error?' error':''}`;note.textContent=text;document.body.append(note);window.setTimeout(()=>note.remove(),2200);
  }
 }
