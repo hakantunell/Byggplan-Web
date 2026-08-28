@@ -1,0 +1,7 @@
+.reportLinkedActivities{margin:8px 0 2px;border-top:1px solid #edf1f3;padding-top:6px}
+.reportLinkedActivities>summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#64737c}
+.reportLinkedActivities>summary::-webkit-details-marker{display:none}
+.reportLinkedActivities .reportActivities{margin-top:7px;padding-top:0;border-top:0}
+.reportEvidenceCompact .reportEvidenceNote{margin:6px 0 0}
+.reportEvidenceCompact .reportEvidenceItems{margin-top:7px}
+@media print{.reportLinkedActivities{display:none!important}}
