@@ -30,17 +30,18 @@ export function ReportEvidence({projectId,activityIds}:{projectId:string;activit
  const[items,setItems]=useState<Evidence[]>([]),[comments,setComments]=useState<ActivityComment[]>([]),[error,setError]=useState('');
  useEffect(()=>{let alive=true;setError('');void Promise.all([loadEvidence(projectId),loadComments(projectId)]).then(([rows,commentRows])=>{if(alive){setItems(rows);setComments(commentRows)}}).catch(err=>{if(alive)setError(err instanceof Error?err.message:'Kunde inte läsa rapportunderlaget.')});return()=>{alive=false}},[projectId]);
  const ids=useMemo(()=>new Set(activityIds),[activityIds.join('|')]);
- const selected=useMemo(()=>items.filter(item=>ids.has(item.activityId)&&hasEvidence(item)),[items,ids]);
+ const selected=useMemo(()=>items.filter(item=>ids.has(item.activityId)&&hasReportEvidence(item)),[items,ids]);
  const selectedComments=useMemo(()=>comments.filter(item=>ids.has(item.activityId)&&item.comment.trim()),[comments,ids]);
  if(error)return <div className="reportEvidenceError">⚠ {error}</div>;
  if(!selected.length&&!selectedComments.length)return null;
- return <div className="reportEvidence">
-   {selectedComments.length>0&&<div className="reportActivityComments"><strong>💬 Kommentarer / ställningstaganden</strong>{selectedComments.map(item=><div className="reportEvidenceActivity" key={`comment:${item.activityId}`}><small>{item.activityTitle||'Aktivitet'}</small><p className="reportEvidenceNote"><b>Kommentar:</b> {item.comment}</p></div>)}</div>}
-   {selected.length>0&&<div className="reportAttachedEvidence"><strong>📎 Bifogat underlag</strong>{selected.map(item=><div className="reportEvidenceActivity" key={item.activityId}><small>{item.activityTitle}</small>{item.note.trim()&&<p className="reportEvidenceNote"><b>Egen bygganteckning:</b> {item.note}</p>}<div className="reportEvidenceItems">{item.requiredFields.flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>))}{item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>)}</div></div>)}</div>}
+ return <div className="reportEvidence reportEvidenceCompact">
+   {selectedComments.length>0&&<div className="reportActivityComments"><strong>💬 Kommentarer / ställningstaganden</strong>{selectedComments.map(item=><p className="reportEvidenceNote" key={`comment:${item.activityId}`}><b>Kommentar:</b> {item.comment}</p>)}</div>}
+   {selected.length>0&&<div className="reportAttachedEvidence"><strong>📎 Bifogat underlag</strong><div className="reportEvidenceItems">{selected.flatMap(item=>item.requiredFields.flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>)))}{selected.flatMap(item=>item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>))}</div></div>}
  </div>
 }
 
-function hasEvidence(item:Evidence){return Boolean(item.note.trim()||item.ownFiles.length||item.requiredFields.some(field=>field.entries.length))}
+// Egna bygganteckningar är privat byggdokumentation och ska inte visas i styrdokumentsrapporten.
+function hasReportEvidence(item:Evidence){return Boolean(item.ownFiles.length||item.requiredFields.some(field=>field.entries.length))}
 
 function EvidenceEntry({field,entry}:{field:Field;entry:Entry}){
  if(entry.url&&entry.originalName)return <EvidenceFile file={{id:entry.id,originalName:entry.originalName,contentType:entry.contentType||'',url:entry.url}} prefix={field.label}/>;
