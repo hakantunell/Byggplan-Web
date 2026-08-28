@@ -36,12 +36,19 @@ export function ReportEvidence({projectId,activityIds}:{projectId:string;activit
  if(!selected.length&&!selectedComments.length)return null;
  return <div className="reportEvidence reportEvidenceCompact">
    {selectedComments.length>0&&<div className="reportActivityComments"><strong>💬 Kommentarer / ställningstaganden</strong>{selectedComments.map(item=><p className="reportEvidenceNote" key={`comment:${item.activityId}`}><b>Kommentar:</b> {item.comment}</p>)}</div>}
-   {selected.length>0&&<div className="reportAttachedEvidence"><strong>📎 Bifogat underlag</strong><div className="reportEvidenceItems">{selected.flatMap(item=>item.requiredFields.flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>)))}{selected.flatMap(item=>item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>))}</div></div>}
+   {selected.length>0&&<div className="reportAttachedEvidence"><strong>📎 Bifogat underlag</strong><div className="reportEvidenceItems">{selected.flatMap(item=>reportFields(item).flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>)))}{selected.flatMap(item=>item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>))}</div></div>}
  </div>
 }
 
-// Egna bygganteckningar är privat byggdokumentation och ska inte visas i styrdokumentsrapporten.
-function hasReportEvidence(item:Evidence){return Boolean(item.ownFiles.length||item.requiredFields.some(field=>field.entries.length))}
+// Styrdokumentsrapporten ska visa utfallet: kommentarer, bilagor, mätvärden och faktisk dokumentation.
+// Aktivitetens instruktion/beskrivning är arbetsstöd för utföraren och hör inte hemma i rapporten till KA/kommun.
+function isInstructionField(field:Field){
+ const type=String(field.type||'').trim().toLocaleLowerCase('sv-SE');
+ const label=String(field.label||'').trim().toLocaleLowerCase('sv-SE');
+ return type.includes('instruction')||type.includes('instruktion')||label==='instruktion'||label==='beskrivning'||label.startsWith('instruktion ');
+}
+function reportFields(item:Evidence){return (item.requiredFields||[]).filter(field=>!isInstructionField(field))}
+function hasReportEvidence(item:Evidence){return Boolean(item.ownFiles.length||reportFields(item).some(field=>field.entries.length))}
 
 function EvidenceEntry({field,entry}:{field:Field;entry:Entry}){
  if(entry.url&&entry.originalName)return <EvidenceFile file={{id:entry.id,originalName:entry.originalName,contentType:entry.contentType||'',url:entry.url}} prefix={field.label}/>;
