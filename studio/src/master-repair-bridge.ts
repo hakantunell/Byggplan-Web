@@ -19,15 +19,22 @@ export function installMasterRepairBridge(){
     const response=await fetch(`/api/studio/projects/${encodeURIComponent(projectId)}/repair-from-master`,{method:'POST'});
     const data=await response.json().catch(()=>({})) as {error?:string;master?:{version?:number};created?:{areas?:number;sections?:number;tasks?:number;activities?:number;retired?:number;refreshedTasks?:number}};
     if(!response.ok)throw new Error(data.error||'Projektet kunde inte uppdateras från Master.');
+
+    const descriptionResponse=await fetch(`/api/studio/projects/${encodeURIComponent(projectId)}/refresh-master-task-descriptions`,{method:'POST'});
+    const descriptions=await descriptionResponse.json().catch(()=>({})) as {error?:string;updated?:number;linkedRecovered?:number};
+    if(!descriptionResponse.ok)throw new Error(descriptions.error||'Momentbeskrivningarna kunde inte uppdateras.');
+
     const c=data.created||{};
     const parts=[
-     c.refreshedTasks?`${c.refreshedTasks} moment uppdaterade`:'',
+     c.refreshedTasks?`${c.refreshedTasks} moment synkroniserade`:'',
+     descriptions.updated?`${descriptions.updated} beskrivningar uppdaterade`:'',
+     descriptions.linkedRecovered?`${descriptions.linkedRecovered} äldre moment återkopplade till Master`:'',
      c.tasks?`${c.tasks} moment skapade`:'',
      c.activities?`${c.activities} aktiviteter skapade`:'',
      c.retired?`${c.retired} äldre aktiviteter pensionerade`:''
     ].filter(Boolean);
     button.textContent='Klart';
-    window.alert(`Projektet är uppdaterat från Master${data.master?.version?` v${data.master.version}`:''}.${parts.length?`\n${parts.join(' · ')}`:''}\n\nSidan laddas om så att den nya strukturen visas.`);
+    window.alert(`Projektet är uppdaterat från Master${data.master?.version?` v${data.master.version}`:''}.${parts.length?`\n${parts.join(' · ')}`:''}\n\nSidan laddas om så att den nya strukturen och momentbeskrivningarna visas.`);
     window.location.reload();
    }catch(error){window.alert(error instanceof Error?error.message:'Projektet kunde inte uppdateras från Master.');button.disabled=false;button.textContent=oldText;busy=false}
   })();
