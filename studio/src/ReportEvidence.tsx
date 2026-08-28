@@ -5,7 +5,7 @@ type FileItem={id:string;originalName:string;contentType:string;sizeBytes?:numbe
 type Entry={id:string;valueText?:string|null;valueNumber?:number|null;valueBoolean?:boolean|null;originalName?:string|null;contentType?:string|null;url?:string|null};
 type Field={id:string;type:string;label:string;unit?:string;required:boolean;entries:Entry[]};
 type Evidence={activityId:string;activityTitle:string;activityType:string;note:string;ownFiles:FileItem[];requiredFields:Field[]};
-type ActivityComment={activityId:string;comment:string};
+type ActivityComment={activityId:string;activityTitle:string;comment:string};
 
 const evidenceCache=new Map<string,Promise<Evidence[]>>();
 const commentCache=new Map<string,Promise<ActivityComment[]>>();
@@ -34,9 +34,8 @@ export function ReportEvidence({projectId,activityIds}:{projectId:string;activit
  const selectedComments=useMemo(()=>comments.filter(item=>ids.has(item.activityId)&&item.comment.trim()),[comments,ids]);
  if(error)return <div className="reportEvidenceError">⚠ {error}</div>;
  if(!selected.length&&!selectedComments.length)return null;
- const titles=new Map(items.map(item=>[item.activityId,item.activityTitle]));
  return <div className="reportEvidence">
-   {selectedComments.length>0&&<div className="reportActivityComments"><strong>💬 Kommentarer / ställningstaganden</strong>{selectedComments.map(item=><div className="reportEvidenceActivity" key={`comment:${item.activityId}`}><small>{titles.get(item.activityId)||'Aktivitet'}</small><p className="reportEvidenceNote"><b>Kommentar:</b> {item.comment}</p></div>)}</div>}
+   {selectedComments.length>0&&<div className="reportActivityComments"><strong>💬 Kommentarer / ställningstaganden</strong>{selectedComments.map(item=><div className="reportEvidenceActivity" key={`comment:${item.activityId}`}><small>{item.activityTitle||'Aktivitet'}</small><p className="reportEvidenceNote"><b>Kommentar:</b> {item.comment}</p></div>)}</div>}
    {selected.length>0&&<div className="reportAttachedEvidence"><strong>📎 Bifogat underlag</strong>{selected.map(item=><div className="reportEvidenceActivity" key={item.activityId}><small>{item.activityTitle}</small>{item.note.trim()&&<p className="reportEvidenceNote"><b>Egen bygganteckning:</b> {item.note}</p>}<div className="reportEvidenceItems">{item.requiredFields.flatMap(field=>field.entries.map(entry=><EvidenceEntry key={entry.id} field={field} entry={entry}/>))}{item.ownFiles.map(file=><EvidenceFile key={file.id} file={file}/>)}</div></div>)}</div>}
  </div>
 }
