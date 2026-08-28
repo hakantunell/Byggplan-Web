@@ -9,6 +9,7 @@ const API_BASE=(import.meta.env.VITE_API_BASE_URL||'https://api.byggplan.tunell.
 export function ActivityOwnDocumentation({activityId,activityType,readOnly}:{activityId:string;activityType:ActivityType;readOnly:boolean}){
   const[open,setOpen]=useState(activityType==='measurement');
   const[loaded,setLoaded]=useState(false);
+  const[comment,setComment]=useState('');
   const[note,setNote]=useState('');
   const[files,setFiles]=useState<OwnFile[]>([]);
   const[busy,setBusy]=useState(false);
@@ -20,15 +21,28 @@ export function ActivityOwnDocumentation({activityId,activityType,readOnly}:{act
 
   async function load(){
     try{
-      const response=await fetch(`${API_BASE}/api/activities/${encodeURIComponent(activityId)}/own-documentation`,{cache:'no-store'});
-      if(!response.ok)throw new Error('Kunde inte läsa egen dokumentation.');
-      const data=await response.json() as {note?:string;files?:OwnFile[]};
-      setNote(data.note||'');setFiles(data.files||[]);setLoaded(true);
-    }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte läsa egen dokumentation.');}
+      const [commentResponse,documentationResponse]=await Promise.all([
+        fetch(`${API_BASE}/api/activities/${encodeURIComponent(activityId)}/comment`,{cache:'no-store'}),
+        fetch(`${API_BASE}/api/activities/${encodeURIComponent(activityId)}/own-documentation`,{cache:'no-store'})
+      ]);
+      if(!commentResponse.ok)throw new Error('Kunde inte läsa aktivitetens kommentar.');
+      if(!documentationResponse.ok)throw new Error('Kunde inte läsa egen dokumentation.');
+      const commentData=await commentResponse.json() as {comment?:string};
+      const data=await documentationResponse.json() as {note?:string;files?:OwnFile[]};
+      setComment(commentData.comment||'');setNote(data.note||'');setFiles(data.files||[]);setLoaded(true);
+    }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte läsa aktivitetsinformationen.');}
   }
 
-  useEffect(()=>{setOpen(activityType==='measurement');setLoaded(false);setNote('');setFiles([]);setMessage('');setAddOpen(false);setCameraOpen(false)},[activityId,activityType]);
+  useEffect(()=>{setOpen(activityType==='measurement');setLoaded(false);setComment('');setNote('');setFiles([]);setMessage('');setAddOpen(false);setCameraOpen(false)},[activityId,activityType]);
   useEffect(()=>{if(open&&!loaded)void load()},[open,loaded,activityId]);
+
+  async function saveComment(value:string){
+    setComment(value);setMessage('');
+    try{
+      const response=await fetch(`${API_BASE}/api/activities/${encodeURIComponent(activityId)}/comment`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:value})});
+      if(!response.ok){const data=await response.json().catch(()=>({})) as {error?:string};throw new Error(data.error||'Kunde inte spara kommentaren.');}
+    }catch(error){setMessage(error instanceof Error?error.message:'Kunde inte spara kommentaren.');}
+  }
 
   async function saveNote(value:string){
     setNote(value);setMessage('');
@@ -55,7 +69,6 @@ export function ActivityOwnDocumentation({activityId,activityType,readOnly}:{act
   }
 
   async function capture(file:File){return uploadOne(file)}
-
   async function closeCamera(){setCameraOpen(false);await load()}
 
   async function remove(file:OwnFile){
@@ -72,14 +85,15 @@ export function ActivityOwnDocumentation({activityId,activityType,readOnly}:{act
     }catch{setMessage('Kunde inte öppna filen.')}
   }
 
-  const label=activityType==='measurement'?'Registrering och egen dokumentation':'Egen dokumentation';
-  const noteLabel=activityType==='measurement'?'Mätvärde / registrering':'Egen anteckning';
-  const count=files.length+(note.trim()?1:0);
+  const label=activityType==='measurement'?'Registrering och dokumentation':'Kommentar och egen dokumentation';
+  const noteLabel=activityType==='measurement'?'Mätvärde / egen registrering':'Egen bygganteckning';
+  const count=files.length+(note.trim()?1:0)+(comment.trim()?1:0);
   return <section className={`ownDocumentation ${open?'open':''}`}>
-    <button type="button" className="ownDocumentationHeader" onClick={()=>setOpen(value=>!value)}><span>📝</span><span><b>{label}</b><small>{count?`${count} sparade poster`:'Frivilligt · för eget bruk'}</small></span><em>{open?'−':'+'}</em></button>
+    <button type="button" className="ownDocumentationHeader" onClick={()=>setOpen(value=>!value)}><span>📝</span><span><b>{label}</b><small>{count?`${count} sparade poster`:'Frivilligt'}</small></span><em>{open?'−':'+'}</em></button>
     {open&&<div className="ownDocumentationBody">{!loaded?<p>Laddar…</p>:<>
-      <label className="ownNote"><span><b>{noteLabel}</b><small>{activityType==='measurement'?'Skriv in mätvärde, referens eller annan relevant information.':'Spara sådant du själv vill komma ihåg om aktiviteten.'}</small></span><textarea disabled={readOnly} value={note} placeholder={activityType==='measurement'?'Ex. koordinat, höjd, mått eller kommentar…':'Anteckning…'} onChange={event=>setNote(event.target.value)} onBlur={event=>{if(!readOnly)void saveNote(event.target.value)}}/></label>
-      <div className="ownPhotos"><div className="ownFilesHeading"><div><b>Foton och filer</b><small>Allt sparas direkt på den här aktiviteten.</small></div>{!readOnly&&<div className="ownAddWrap"><button type="button" className="ownAddButton" disabled={busy} onClick={()=>setAddOpen(value=>!value)} aria-expanded={addOpen}>+</button>{addOpen&&<div className="ownAddMenu"><button type="button" onClick={()=>{setAddOpen(false);setCameraOpen(true)}}><span>📷</span><span><b>Kamera</b><small>Ta flera bilder i följd</small></span></button><button type="button" onClick={()=>photosInput.current?.click()}><span>🖼</span><span><b>Foton</b><small>Välj en eller flera bilder</small></span></button><button type="button" onClick={()=>filesInput.current?.click()}><span>📎</span><span><b>Filer</b><small>Välj bild eller PDF</small></span></button></div>}</div>}</div>
+      <label className="ownNote"><span><b>Kommentar / ställningstagande</b><small>Projektspecifik kommentar om hur aktiviteten hanterats. Visas i rapporter för kopplade styrdokument.</small></span><textarea disabled={readOnly} value={comment} placeholder="Ex. Inga bodar inom den egna fastigheten behövs. Endast upplag." onChange={event=>setComment(event.target.value)} onBlur={event=>{if(!readOnly)void saveComment(event.target.value)}}/></label>
+      <label className="ownNote"><span><b>{noteLabel}</b><small>{activityType==='measurement'?'Skriv in mätvärde, referens eller annan egen dokumentation.':'Egen dokumentation om hur huset faktiskt är byggt. Den hör till byggdokumentationen, inte styrdokumentsrapporten.'}</small></span><textarea disabled={readOnly} value={note} placeholder={activityType==='measurement'?'Ex. koordinat, höjd eller mått…':'Ex. konstruktionsdetalj, mått eller egen bygganteckning…'} onChange={event=>setNote(event.target.value)} onBlur={event=>{if(!readOnly)void saveNote(event.target.value)}}/></label>
+      <div className="ownPhotos"><div className="ownFilesHeading"><div><b>Foton och filer</b><small>Egen byggdokumentation som sparas direkt på aktiviteten.</small></div>{!readOnly&&<div className="ownAddWrap"><button type="button" className="ownAddButton" disabled={busy} onClick={()=>setAddOpen(value=>!value)} aria-expanded={addOpen}>+</button>{addOpen&&<div className="ownAddMenu"><button type="button" onClick={()=>{setAddOpen(false);setCameraOpen(true)}}><span>📷</span><span><b>Kamera</b><small>Ta flera bilder i följd</small></span></button><button type="button" onClick={()=>photosInput.current?.click()}><span>🖼</span><span><b>Foton</b><small>Välj en eller flera bilder</small></span></button><button type="button" onClick={()=>filesInput.current?.click()}><span>📎</span><span><b>Filer</b><small>Välj bild eller PDF</small></span></button></div>}</div>}</div>
       {!readOnly&&<><input ref={photosInput} className="ownHiddenInput" type="file" accept="image/*" multiple disabled={busy} onChange={event=>{const selected=Array.from(event.target.files||[]);event.target.value='';if(selected.length)void upload(selected)}}/><input ref={filesInput} className="ownHiddenInput" type="file" accept="image/*,application/pdf" multiple disabled={busy} onChange={event=>{const selected=Array.from(event.target.files||[]);event.target.value='';if(selected.length)void upload(selected)}}/></>}
       {busy&&<small className="ownUploadState">Laddar upp…</small>}
       {files.length>0&&<div className="ownPhotoList">{files.map(file=><div key={file.id}><button type="button" className="ownPhotoOpen" onClick={()=>void openFile(file)}><span>{file.contentType.startsWith('image/')?'🖼':'📄'}</span><span><b>{file.originalName}</b><small>{file.contentType.startsWith('image/')?'Bild':'PDF'} · {formatBytes(file.sizeBytes)}</small></span></button>{!readOnly&&<button type="button" className="ownPhotoDelete" onClick={()=>void remove(file)} aria-label="Ta bort">×</button>}</div>)}</div>}</div>
