@@ -97,14 +97,26 @@ export function installActivityMoveBridge(){
   const target=(event.target as HTMLElement|null)?.closest<HTMLElement>('.activityTreeDropTarget');
   if(!target?.dataset.taskId||target.dataset.taskId===dragged.taskId)return;
   event.preventDefault();target.classList.remove('activityTreeDropHover');
-  const move={...dragged};dragged=null;
+  const move={...dragged};const targetTaskId=target.dataset.taskId;dragged=null;
   void (async()=>{
    try{
-    const response=await fetch(`/api/activities/${encodeURIComponent(move.activityId)}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetTaskId:target.dataset.taskId})});
+    const response=await fetch(`/api/activities/${encodeURIComponent(move.activityId)}/move`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetTaskId})});
     const data=await response.json().catch(()=>({})) as {error?:string};
     if(!response.ok)throw new Error(data.error||'Aktiviteten kunde inte flyttas.');
     showMessage('Aktiviteten flyttad');
-    window.setTimeout(()=>window.location.reload(),250);
+
+    // Invalidate the drag helper's cache. React's project tree is then refreshed
+    // through its existing editor save/reload path instead of reloading the page.
+    tasks=[];loadedProjectId='';
+    const movedRow=document.querySelector<HTMLElement>(`.activityTreeDraggable[data-activity-id="${CSS.escape(move.activityId)}"]`);
+    movedRow?.click();
+    window.setTimeout(()=>{
+     const save=Array.from(document.querySelectorAll<HTMLButtonElement>('.projectMain .editActions button.primary')).find(button=>NORMALIZE(button.textContent)==='Spara ändringar');
+     if(save){save.click();return}
+     // Fallback: leave the page intact even if the editor could not be selected.
+     // The server-side move is already complete and a manual refresh will show it.
+     scheduleSync();
+    },60);
    }catch(error){showMessage(error instanceof Error?error.message:'Aktiviteten kunde inte flyttas.',true)}
   })();
  });
