@@ -10,6 +10,8 @@ import { installGraphPlanStructureRefinement } from './graph-plan-structure-refi
 import { installGraphActivityOverlay } from './graph-activity-overlay';
 import { installActivityMoveBridge } from './activity-move-bridge';
 import { installMasterRepairBridge } from './master-repair-bridge';
+import { installTaskDescriptionRefreshBridge } from './task-description-refresh-bridge';
+import { installGraphDependencyOrphanRepair } from './graph-dependency-orphan-repair';
 import { StudioShell } from './StudioShell';
 import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import { ProjectInformationMount } from './ProjectInformationMount';
@@ -52,4 +54,6 @@ installGraphPlanStructureRefinement();
 installGraphActivityOverlay();
 installActivityMoveBridge();
 installMasterRepairBridge();
+installTaskDescriptionRefreshBridge();
+installGraphDependencyOrphanRepair();
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioShell/><ProjectInformationMount/><SystemBackupSettingsMount/><ProjectExecutionResetSettingsMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
