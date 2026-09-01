@@ -14,6 +14,7 @@ import { installTaskDescriptionRefreshBridge } from './task-description-refresh-
 import { installGraphDependencyOrphanRepair } from './graph-dependency-orphan-repair';
 import { installGoverningReportActivityDetails } from './governing-report-activity-details';
 import { installGoverningReportOutcomeOnly } from './governing-report-outcome-only';
+import { installHierarchyEditGuard } from './hierarchy-edit-guard';
 import { StudioShell } from './StudioShell';
 import { MasterV2UpgradeAction } from './MasterV2UpgradeAction';
 import { ProjectInformationMount } from './ProjectInformationMount';
@@ -61,4 +62,5 @@ installTaskDescriptionRefreshBridge();
 installGraphDependencyOrphanRepair();
 installGoverningReportActivityDetails();
 installGoverningReportOutcomeOnly();
+installHierarchyEditGuard();
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioShell/><ProjectInformationMount/><SystemBackupSettingsMount/><ProjectExecutionResetSettingsMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
