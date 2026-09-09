@@ -23,6 +23,42 @@ export function ProjectHierarchyIndicators() {
       governed.set(path, ids);
     }
 
+    function activeActivities(task: Task) {
+      return (task.activities ?? []).filter(activity => metadata.get(activity.id)?.applicability !== 'deprecated');
+    }
+
+    function taskComplete(task: Task | undefined) {
+      if (!task) return false;
+      const active = activeActivities(task);
+      return active.length > 0 && active.every(activity => Boolean(activity.done));
+    }
+
+    function sectionComplete(area: string, section: string) {
+      const sectionTasks = tasks.filter(task => task.workArea === area && task.workSection === section);
+      return sectionTasks.length > 0 && sectionTasks.every(task => taskComplete(task));
+    }
+
+    function areaComplete(area: string) {
+      const areaTasks = tasks.filter(task => task.workArea === area);
+      return areaTasks.length > 0 && areaTasks.every(task => taskComplete(task));
+    }
+
+    function setHierarchyStatus(row: HTMLElement, depth: number, complete: boolean) {
+      if (depth < 1 || depth > 3) return;
+      const icon = Array.from(row.children).find(child =>
+        child instanceof HTMLElement
+        && child.tagName === 'SPAN'
+        && !child.classList.contains('projectTreeLabel')
+        && !child.classList.contains('navSpacer')
+        && !child.classList.contains('hierGov')
+      ) as HTMLElement | undefined;
+      if (!icon) return;
+      const defaultIcon = depth === 1 ? '⛏' : depth === 2 ? '⌖' : '▣';
+      icon.textContent = complete ? '✓' : defaultIcon;
+      icon.classList.toggle('hierHierarchyDone', complete);
+      row.classList.toggle('hierHierarchyRowDone', complete);
+    }
+
     function rebuildGovernedIndex() {
       governed.clear();
       for (const task of tasks) {
@@ -98,6 +134,13 @@ export function ProjectHierarchyIndicators() {
           : pathKey(area, section, task, label);
         setGovernedChip(row, governed.get(key)?.size ?? 0, depth !== 4);
 
+        if (depth === 1) setHierarchyStatus(row, depth, areaComplete(area));
+        if (depth === 2) setHierarchyStatus(row, depth, sectionComplete(area, section));
+        if (depth === 3) {
+          const currentTask = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task);
+          setHierarchyStatus(row, depth, taskComplete(currentTask));
+        }
+
         if (depth === 4) {
           const activity = tasks.find(item => item.workArea === area && item.workSection === section && item.title === task)
             ?.activities.find(item => item.title === label && metadata.get(item.id)?.applicability !== 'deprecated');
@@ -137,6 +180,17 @@ export function ProjectHierarchyIndicators() {
             icon.className = activity.done ? 'momentDone' : 'momentTodo';
             row.classList.toggle('completed', activity.done);
           }
+        }
+
+        if (nodeType === 'ARBETSAVSNITT') {
+          const task = tasks.find(item => item.workArea === path[0] && item.workSection === path[1] && item.title === label);
+          const complete = taskComplete(task);
+          const icon = row.firstElementChild as HTMLElement | null;
+          if (icon) {
+            icon.textContent = complete ? '✓' : '▣';
+            icon.className = complete ? 'momentDone hierHierarchyDone' : 'momentTodo';
+          }
+          row.classList.toggle('completed', complete);
         }
       }
     }
