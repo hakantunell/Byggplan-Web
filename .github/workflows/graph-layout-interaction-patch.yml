@@ -1,0 +1,69 @@
+name: Apply graph interaction patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/graph-layout-interaction-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch GraphicalPlanView
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/GraphicalPlanView.tsx')
+          s=p.read_text()
+
+          old=" |{kind:'node';id:string;startX:number;startY:number;dx:number;dy:number}"
+          new=" |{kind:'node';id:string;ids:string[];startX:number;startY:number;starts:OffsetMap;scrollLeft:number;scrollTop:number}"
+          assert old in s, 'DragState node shape not found'
+          s=s.replace(old,new,1)
+
+          old="const[panning,setPanning]=useState(false);const dragRef=useRef<DragState|null>(null);"
+          new="const[panning,setPanning]=useState(false);const[multiSelected,setMultiSelected]=useState<Set<string>>(new Set());const dragRef=useRef<DragState|null>(null);"
+          assert old in s, 'state insertion point not found'
+          s=s.replace(old,new,1)
+
+          old="if(drag.kind==='node'){setOffsets(current=>({...current,[drag.id]:{dx:drag.dx+dx,dy:drag.dy+dy}}));}else if(drag.kind==='edge')"
+          new="""if(drag.kind==='node'){const canvas=canvasRef.current;if(canvas){const rect=canvas.getBoundingClientRect();const edge=64;const maxStep=22;let sx=0,sy=0;if(e.clientX<rect.left+edge)sx=-Math.min(maxStep,(rect.left+edge-e.clientX)*.35);else if(e.clientX>rect.right-edge)sx=Math.min(maxStep,(e.clientX-(rect.right-edge))*.35);if(e.clientY<rect.top+edge)sy=-Math.min(maxStep,(rect.top+edge-e.clientY)*.35);else if(e.clientY>rect.bottom-edge)sy=Math.min(maxStep,(e.clientY-(rect.bottom-edge))*.35);if(sx||sy){canvas.scrollLeft+=sx;canvas.scrollTop+=sy;}}const scrollDx=((canvas?.scrollLeft||0)-drag.scrollLeft)/zoom;const scrollDy=((canvas?.scrollTop||0)-drag.scrollTop)/zoom;setOffsets(current=>{const next={...current};for(const id of drag.ids){const start=drag.starts[id]||{dx:0,dy:0};next[id]={dx:start.dx+dx+scrollDx,dy:start.dy+dy+scrollDy};}return next;});}else if(drag.kind==='edge')"""
+          assert old in s, 'node move branch not found'
+          s=s.replace(old,new,1)
+
+          old="const map=new Map<string,Position>();let width=autoPositions.width,height=autoPositions.height;for(const node of allNodes){const base=autoPositions.map.get(node.task.id);if(!base)continue;const offset=offsets[node.task.id]||{dx:0,dy:0};const pos={x:Math.max(20,base.x+offset.dx),y:Math.max(20,base.y+offset.dy)};map.set(node.task.id,pos);width=Math.max(width,pos.x+NODE_W+170);height=Math.max(height,pos.y+NODE_H+170);}return{map,width,height};"
+          new="""const rawMap=new Map<string,Position>();let minX=20,minY=20,maxX=0,maxY=0;for(const node of allNodes){const base=autoPositions.map.get(node.task.id);if(!base)continue;const offset=offsets[node.task.id]||{dx:0,dy:0};const pos={x:base.x+offset.dx,y:base.y+offset.dy};rawMap.set(node.task.id,pos);minX=Math.min(minX,pos.x);minY=Math.min(minY,pos.y);maxX=Math.max(maxX,pos.x+NODE_W);maxY=Math.max(maxY,pos.y+NODE_H);}const shiftX=minX<20?20-minX:0;const shiftY=minY<20?20-minY:0;const map=new Map<string,Position>();for(const [id,pos] of rawMap)map.set(id,{x:pos.x+shiftX,y:pos.y+shiftY});const width=Math.max(autoPositions.width+shiftX,maxX+shiftX+170);const height=Math.max(autoPositions.height+shiftY,maxY+shiftY+170);return{map,width,height};"""
+          assert old in s, 'positions block not found'
+          s=s.replace(old,new,1)
+
+          old="className={`graphStep dependencyGraphNode draggable ${editDeps?'depEdit':''} ${depClass} ${node.stop?'stop':''} ${node.status} ${selectedNode?.task.id===node.task.id?'selected':''}`}"
+          new="className={`graphStep dependencyGraphNode draggable ${editDeps?'depEdit':''} ${depClass} ${node.stop?'stop':''} ${node.status} ${multiSelected.has(node.task.id)?'multiSelected':''} ${selectedNode?.task.id===node.task.id?'selected':''}`}"
+          assert old in s, 'node className not found'
+          s=s.replace(old,new,1)
+
+          old="onPointerDown={e=>{if(e.button!==0||editDeps)return;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);dragRef.current={kind:'node',id:node.task.id,startX:e.clientX,startY:e.clientY,dx:off.dx,dy:off.dy};}} onClick={e=>{e.stopPropagation();setSelected(node.task.id);setSelectedEdge('');setEdgeMenu(null);}}"
+          new="""onPointerDown={e=>{if(e.button!==0||editDeps)return;const additive=e.ctrlKey||e.metaKey||e.shiftKey;const ids=multiSelected.has(node.task.id)?[...multiSelected]:[node.task.id];if(!additive&&!multiSelected.has(node.task.id))setMultiSelected(new Set([node.task.id]));const starts:OffsetMap={};for(const id of ids)starts[id]=offsets[id]||{dx:0,dy:0};(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);dragRef.current={kind:'node',id:node.task.id,ids,startX:e.clientX,startY:e.clientY,starts,scrollLeft:canvasRef.current?.scrollLeft||0,scrollTop:canvasRef.current?.scrollTop||0};}} onClick={e=>{e.stopPropagation();const additive=e.ctrlKey||e.metaKey||e.shiftKey;if(additive){setMultiSelected(current=>{const next=new Set(current);if(next.has(node.task.id))next.delete(node.task.id);else next.add(node.task.id);return next;});}else setMultiSelected(new Set([node.task.id]));setSelected(node.task.id);setSelectedEdge('');setEdgeMenu(null);}}"""
+          assert old in s, 'node pointer/click handlers not found'
+          s=s.replace(old,new,1)
+
+          old=".dependencyGraphNode.depInvalid{outline:3px solid rgba(176,73,63,.28);outline-offset:4px}"
+          new=".dependencyGraphNode.depInvalid{outline:3px solid rgba(176,73,63,.28);outline-offset:4px}.dependencyGraphNode.multiSelected:not(.selected){outline:2px solid rgba(79,127,98,.42);outline-offset:3px}"
+          assert old in s, 'graph inline CSS insertion point not found'
+          s=s.replace(old,new,1)
+
+          p.write_text(s)
+          PY
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/graph-layout-interaction-patch.yml
+          git add studio/src/GraphicalPlanView.tsx
+          git commit -m "Expand graph canvas and support grouped node dragging"
+          git push
