@@ -29,8 +29,27 @@ function readDependencies():DependencyMap{try{return JSON.parse(localStorage.get
 
 function applyTaskVisualStatus(taskId:string,status:string){
   const node=document.querySelector<HTMLElement>(`.dependencyGraphNode[data-node-id="${CSS.escape(taskId)}"]`);
-  if(node){node.classList.remove('done','active','ready','blocked','planned');node.classList.add(status==='done'?'done':status==='active'?'active':'planned');const glyph=node.querySelector<HTMLElement>('.graphNode');if(glyph){glyph.textContent=status==='done'?'✓':'';}const label=node.querySelector<HTMLElement>('.graphNodeText small');if(label){const prefix=label.textContent?.includes('STOPPUNKT')?'STOPPUNKT · ':'';label.textContent=`${prefix}${status==='done'?'Klar':status==='active'?'Pågår':'Planerad'}`;}}
-  if(selectedTaskId()===taskId){const inspector=document.querySelector<HTMLElement>('.graphInspector');const state=inspector?.querySelector<HTMLElement>('.graphInspectorTop p');if(state)state.textContent=status==='done'?'Klar':status==='active'?'Pågår':'Planerad';const icon=inspector?.querySelector<HTMLElement>('.graphInspectorNode');if(icon){icon.classList.remove('done','active','ready','blocked','planned');icon.classList.add(status==='done'?'done':status==='active'?'active':'planned');icon.textContent=status==='done'?'✓':'';}}
+  if(node){
+    const glyph=node.querySelector<HTMLElement>('.graphNode');
+    const label=node.querySelector<HTMLElement>('.graphNodeText small');
+    if(status==='done'||status==='active'){
+      node.classList.remove('done','active','ready','blocked','planned');
+      node.classList.add(status);
+      if(glyph)glyph.textContent=status==='done'?'✓':'';
+      if(label){const prefix=label.textContent?.includes('STOPPUNKT')?'STOPPUNKT · ':'';label.textContent=`${prefix}${status==='done'?'Klar':'Pågår'}`;}
+    }
+    // For todo/planned tasks, the graph itself owns the visual state. In particular,
+    // blocked/ready icons and classes must not be replaced merely because the node is selected.
+  }
+  if(selectedTaskId()===taskId){
+    const inspector=document.querySelector<HTMLElement>('.graphInspector');
+    const state=inspector?.querySelector<HTMLElement>('.graphInspectorTop p');
+    const icon=inspector?.querySelector<HTMLElement>('.graphInspectorNode');
+    if(status==='done'||status==='active'){
+      if(state)state.textContent=status==='done'?'Klar':'Pågår';
+      if(icon){icon.classList.remove('done','active','ready','blocked','planned');icon.classList.add(status);icon.textContent=status==='done'?'✓':'';}
+    }
+  }
 }
 
 function deriveTaskStatus(taskId:string){
