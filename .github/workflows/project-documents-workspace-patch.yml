@@ -21,24 +21,23 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import json
 
-          # StudioShell: add standalone project documents main view.
           p=Path('studio/src/StudioShell.tsx'); s=p.read_text()
           s=s.replace("import { ProjectBackupView } from './ProjectBackupView';", "import { ProjectBackupView } from './ProjectBackupView';\nimport { ProjectDocumentsWorkspace } from './ProjectDocumentsWorkspace';")
           s=s.replace("type StudioView='project'|'governing-documents'|'governing-mapping'|'master-projects'|'users'|'control-plan'|'graphical-plan'|'backup';", "type StudioView='project'|'project-documents'|'governing-documents'|'governing-mapping'|'master-projects'|'users'|'control-plan'|'graphical-plan'|'backup';")
           s=s.replace("<ProjectWorkspace projects={projects} projectId={projectId} onProjectChange={selectProject} onOpenGoverningDocuments={()=>setView('governing-documents')}", "<ProjectWorkspace projects={projects} projectId={projectId} onProjectChange={selectProject} onOpenProjectDocuments={()=>setView('project-documents')} onOpenGoverningDocuments={()=>setView('governing-documents')}")
           s=s.replace("const master=view==='master-projects',mapping=view==='governing-mapping',users=view==='users',controlPlan=view==='control-plan',graphicalPlan=view==='graphical-plan',backup=view==='backup';", "const master=view==='master-projects',projectDocuments=view==='project-documents',mapping=view==='governing-mapping',users=view==='users',controlPlan=view==='control-plan',graphicalPlan=view==='graphical-plan',backup=view==='backup';")
           s=s.replace("backup?'Backup':'Styrdokument'", "backup?'Backup':projectDocuments?'Projektdokument':'Styrdokument'")
-          marker='<button title="Styrdokument" onClick={()=>setView(\'governing-documents\')}>📚<span>Styrdokument</span></button>'
-          insert='<button className={projectDocuments?\'active\':\'\'} title="Projektdokument" onClick={()=>setView(\'project-documents\')}>📄<span>Projektdokument</span></button>'+marker
+          marker="<button className={view==='governing-documents'?'active':''} title=\"Styrdokument\" onClick={()=>setView('governing-documents')}>📚<span>Styrdokument</span></button>"
           assert marker in s, 'StudioShell governing button not found'
+          insert="<button className={projectDocuments?'active':''} title=\"Projektdokument\" onClick={()=>setView('project-documents')}>📄<span>Projektdokument</span></button>"+marker
           s=s.replace(marker,insert,1)
           old="users?<ProjectUsersView projectId={projectId}/>:controlPlan?<ControlPlanReviewView projectId={projectId} projectName={current?.name} propertyDesignation={current?.property_designation}/>:graphicalPlan?<GraphicalPlanView projectId={projectId} projectName={current?.name}/>:backup?<ProjectBackupView projectId={projectId} projectName={current?.name}/>:mapping?<GoverningMappingView projectId={projectId}/>:<GoverningDocumentsWorkspace projectId={projectId} onOpenMapping={()=>setView('governing-mapping')}/>"
           new="users?<ProjectUsersView projectId={projectId}/>:controlPlan?<ControlPlanReviewView projectId={projectId} projectName={current?.name} propertyDesignation={current?.property_designation}/>:graphicalPlan?<GraphicalPlanView projectId={projectId} projectName={current?.name}/>:backup?<ProjectBackupView projectId={projectId} projectName={current?.name}/>:projectDocuments?<ProjectDocumentsWorkspace projectId={projectId} projectName={current?.name}/>:mapping?<GoverningMappingView projectId={projectId}/>:<GoverningDocumentsWorkspace projectId={projectId} onOpenMapping={()=>setView('governing-mapping')}/>"
-          assert old in s, 'StudioShell view renderer not found'; s=s.replace(old,new,1)
+          assert old in s, 'StudioShell renderer not found'; s=s.replace(old,new,1)
           p.write_text(s)
 
-          # ProjectWorkspace: remove project documents from the internal project tree and expose rail navigation.
           p=Path('studio/src/ProjectWorkspace.tsx'); s=p.read_text()
           s=s.replace("import { ProjectDocumentsEditor } from './ProjectDocumentsEditor';\n",'')
           s=s.replace("type Page='overview'|'activities'|'administration'|'conditions'|'documents'|'information'|'reports'|'settings';", "type Page='overview'|'activities'|'administration'|'conditions'|'information'|'reports'|'settings';")
@@ -46,28 +45,21 @@ jobs:
           s=s.replace("{id:'conditions',label:'Projektvillkor',icon:'◆'},{id:'documents',label:'Projektdokument',icon:'📄'},{id:'information'", "{id:'conditions',label:'Projektvillkor',icon:'◆'},{id:'information'")
           s=s.replace("export function ProjectWorkspace({projects,projectId,onProjectChange,onOpenGoverningDocuments,onOpenGoverningMapping,mappingWarning=0,onOpenMasterProjects}:Props)", "export function ProjectWorkspace({projects,projectId,onProjectChange,onOpenProjectDocuments,onOpenGoverningDocuments,onOpenGoverningMapping,mappingWarning=0,onOpenMasterProjects}:Props)")
           marker='<button title="Styrdokument" onClick={onOpenGoverningDocuments}>📚<span>Styrdokument</span></button>'
-          insert='<button title="Projektdokument" onClick={onOpenProjectDocuments}>📄<span>Projektdokument</span></button>'+marker
-          assert marker in s, 'ProjectWorkspace governing button not found'; s=s.replace(marker,insert,1)
+          assert marker in s, 'ProjectWorkspace governing button not found'
+          s=s.replace(marker,'<button title="Projektdokument" onClick={onOpenProjectDocuments}>📄<span>Projektdokument</span></button>'+marker,1)
           s=s.replace(";if(selection.page==='documents')return <ProjectDocumentsEditor projectId={project?.id||''}/>",'')
           p.write_text(s)
 
-          # ProjectDocumentsEditor: allow standalone workspace to control edit mode.
           p=Path('studio/src/ProjectDocumentsEditor.tsx'); s=p.read_text()
           s=s.replace("export function ProjectDocumentsEditor({projectId}:{projectId:string}){", "export function ProjectDocumentsEditor({projectId,externalEditMode}:{projectId:string;externalEditMode?:boolean}){")
           old="useEffect(()=>{const workspace=document.querySelector('.projectWorkspace');if(!workspace)return;const sync=()=>{const next=workspace.classList.contains('editMode');setEditMode(next);if(!next)setEditingId('')};sync();const observer=new MutationObserver(sync);observer.observe(workspace,{attributes:true,attributeFilter:['class']});return()=>observer.disconnect()},[]);"
           new="useEffect(()=>{if(externalEditMode!==undefined){setEditMode(externalEditMode);if(!externalEditMode)setEditingId('');return}const workspace=document.querySelector('.projectWorkspace');if(!workspace)return;const sync=()=>{const next=workspace.classList.contains('editMode');setEditMode(next);if(!next)setEditingId('')};sync();const observer=new MutationObserver(sync);observer.observe(workspace,{attributes:true,attributeFilter:['class']});return()=>observer.disconnect()},[externalEditMode]);"
-          assert old in s, 'ProjectDocumentsEditor editMode effect not found'; s=s.replace(old,new,1)
+          assert old in s, 'ProjectDocumentsEditor edit effect not found'; s=s.replace(old,new,1)
           p.write_text(s)
 
-          # main CSS import.
-          p=Path('studio/src/main.tsx'); s=p.read_text()
-          marker="import './project-documents.css';"
-          assert marker in s, 'main project-documents css import not found'
-          s=s.replace(marker,marker+"\nimport './project-documents-workspace.css';",1)
-          p.write_text(s)
+          p=Path('studio/src/main.tsx'); s=p.read_text(); marker="import './project-documents.css';"; assert marker in s
+          s=s.replace(marker,marker+"\nimport './project-documents-workspace.css';",1); p.write_text(s)
 
-          # pdf.js dependency.
-          import json
           p=Path('studio/package.json'); data=json.loads(p.read_text()); data.setdefault('dependencies',{})['pdfjs-dist']='^5.4.149'; p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
           PY
           git config user.name "byggplan-bot"
