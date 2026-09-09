@@ -49,6 +49,7 @@ import './governing-workspace-nav.css';
 import './governing-mapping-rail.css';
 import './project-utility-rail.css';
 import './graphical-plan.css';
+import './graph-active-stop-icon-fix.css';
 import './graph-activity-overlay.css';
 import './governing-report-activity-details.css';
 
