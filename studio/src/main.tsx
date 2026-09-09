@@ -37,6 +37,7 @@ import './studio-shell.css';
 import './master-projects.css';
 import './project-support.css';
 import './project-documents.css';
+import './project-documents-workspace.css';
 import './project-administration.css';
 import './project-detail-tabs.css';
 import './project-activities.css';
