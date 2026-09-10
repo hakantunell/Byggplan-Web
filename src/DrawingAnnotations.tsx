@@ -21,6 +21,15 @@ function readDrawingState(projectId:string):DrawingState{
   if(!projectId)return {};
   try{return JSON.parse(localStorage.getItem(DRAWING_STORAGE_PREFIX+projectId)||'{}') as DrawingState}catch{return {}}
 }
+async function loadDrawingState(projectId:string):Promise<DrawingState>{
+  const local=readDrawingState(projectId);
+  try{
+    const r=await fetch(`${annotationApi('/project-drawing-measurements')}?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'});
+    if(!r.ok)return local;
+    const data=await r.json() as {state?:DrawingState};
+    return data.state&&typeof data.state==='object'?data.state:local;
+  }catch{return local}
+}
 function formatMm(value:number){
   if(!Number.isFinite(value))return '';
   if(value>=1000)return `${(value/1000).toLocaleString('sv-SE',{minimumFractionDigits:0,maximumFractionDigits:3})} m`;
@@ -81,7 +90,7 @@ export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{
   },[documentId]);
 
   useEffect(()=>{setAnnotations([]);setSelected(null);setPending(null);setPageNumber(1);void loadAnnotations()},[documentId,loadAnnotations]);
-  useEffect(()=>{setDrawingState(readDrawingState(projectId));setShowMeasurements(true)},[projectId,file.id]);
+  useEffect(()=>{let cancelled=false;setDrawingState(readDrawingState(projectId));setShowMeasurements(true);void loadDrawingState(projectId).then(state=>{if(!cancelled)setDrawingState(state)});return()=>{cancelled=true}},[projectId,file.id]);
   useEffect(()=>{
     const key=DRAWING_STORAGE_PREFIX+projectId;
     const onStorage=(event:StorageEvent)=>{if(event.key===key)setDrawingState(readDrawingState(projectId))};

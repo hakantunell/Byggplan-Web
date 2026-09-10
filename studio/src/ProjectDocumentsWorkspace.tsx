@@ -18,6 +18,24 @@ type Tool='hand'|'calibrate'|'measure';
 
 const STORAGE_PREFIX='byggplan.drawingMeasurements.v1.';
 
+async function loadSharedState(projectId:string):Promise<DrawingState>{
+ const local=readState(projectId);
+ try{
+  const r=await fetch(`/api/project-drawing-measurements?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'});
+  if(!r.ok)return local;
+  const data=await r.json() as {state?:DrawingState};
+  const remote=data.state&&typeof data.state==='object'?data.state:{};
+  if(Object.keys(remote).length)return remote;
+  if(Object.keys(local).length){await saveSharedState(projectId,local);return local}
+  return {};
+ }catch{return local}
+}
+async function saveSharedState(projectId:string,state:DrawingState){
+ writeState(projectId,state);
+ try{await fetch('/api/project-drawing-measurements',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,state})})}catch{}
+}
+
+
 export function ProjectDocumentsWorkspace({projectId,projectName}:{projectId:string;projectName?:string}){
  const[tab,setTab]=useState<'documents'|'drawings'>('documents');
  const[editMode,setEditMode]=useState(false);
@@ -28,7 +46,7 @@ export function ProjectDocumentsWorkspace({projectId,projectName}:{projectId:str
 function DrawingMeasurementView({projectId,toolbarHost}:{projectId:string;toolbarHost:HTMLDivElement|null}){
  const[documents,setDocuments]=useState<ProjectDocument[]>([]);const[loading,setLoading]=useState(true);const[message,setMessage]=useState('');const[selectedDoc,setSelectedDoc]=useState('');const[selectedFile,setSelectedFile]=useState('');const[page,setPage]=useState(1);const[pageCount,setPageCount]=useState(1);const[tool,setTool]=useState<Tool>('hand');const[showMeasurements,setShowMeasurements]=useState(true);const[pending,setPending]=useState<Point[]>([]);const[cursorPoint,setCursorPoint]=useState<Point|null>(null);const[states,setStates]=useState<DrawingState>(()=>readState(projectId));const[assetUrl,setAssetUrl]=useState('');const[isPdf,setIsPdf]=useState(false);const[zoom,setZoom]=useState(1);const[pdfPageMm,setPdfPageMm]=useState<{w:number;h:number}|null>(null);
  const canvasRef=useRef<HTMLCanvasElement|null>(null);const imageRef=useRef<HTMLImageElement|null>(null);const stageRef=useRef<HTMLDivElement|null>(null);const viewportRef=useRef<HTMLDivElement|null>(null);
- useEffect(()=>{setStates(readState(projectId));void loadDocuments()},[projectId]);
+ useEffect(()=>{let cancelled=false;setStates(readState(projectId));void loadSharedState(projectId).then(state=>{if(!cancelled)setStates(state)});void loadDocuments();return()=>{cancelled=true}},[projectId]);
  useEffect(()=>{setPending([]);setPage(1);setZoom(1)},[selectedFile]);
  useEffect(()=>{void loadAsset();return()=>{if(assetUrl)URL.revokeObjectURL(assetUrl)}},[selectedFile]);
  useEffect(()=>{if(isPdf&&assetUrl)void renderPdf()},[isPdf,assetUrl,page,zoom]);
@@ -40,7 +58,7 @@ function DrawingMeasurementView({projectId,toolbarHost}:{projectId:string;toolba
  async function loadDocuments(){setLoading(true);setMessage('');try{const[dr,cr]=await Promise.all([fetch(`/api/project-documents?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'}),fetch(`/api/project-document-categories?projectId=${encodeURIComponent(projectId)}`,{cache:'no-store'})]);if(!dr.ok)throw new Error('Kunde inte läsa projektdokument.');const d=await dr.json() as {documents?:ProjectDocument[]};let categories:Array<{id:string;category:DocumentCategory}>=[];if(cr.ok){const c=await cr.json().catch(()=>({})) as {categories?:Array<{id:string;category:DocumentCategory}>};categories=c.categories||[]}const cm=new Map(categories.map(x=>[x.id,x.category]));const next=(d.documents||[]).map(x=>({...x,category:cm.get(x.id)||'unclassified'}));setDocuments(next);const first=next.find(x=>cm.get(x.id)==='drawing'&&x.attachments?.length);if(first){setSelectedDoc(cur=>cur&&next.some(x=>x.id===cur)?cur:first.id);setSelectedFile(cur=>cur&&next.some(x=>x.attachments.some(a=>a.id===cur))?cur:first.attachments[0].id)}}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte läsa ritningar.')}finally{setLoading(false)}}
  async function loadAsset(){if(!attachment){setAssetUrl('');return}try{const r=await fetch(attachment.url,{cache:'no-store'});if(!r.ok)throw new Error(`Kunde inte öppna ritningen (HTTP ${r.status}).`);const blob=await r.blob();const url=URL.createObjectURL(blob);setAssetUrl(old=>{if(old)URL.revokeObjectURL(old);return url});setIsPdf(attachment.contentType.includes('pdf')||attachment.originalName.toLowerCase().endsWith('.pdf'))}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte öppna ritningen.')}}
  async function renderPdf(){if(!assetUrl||!canvasRef.current)return;try{const bytes=new Uint8Array(await(await fetch(assetUrl)).arrayBuffer());const pdf=await pdfjsLib.getDocument({data:bytes}).promise;setPageCount(pdf.numPages);const current=Math.min(page,pdf.numPages);if(current!==page){setPage(current);return}const p=await pdf.getPage(current);const baseViewport=p.getViewport({scale:1});setPdfPageMm({w:baseViewport.width*25.4/72,h:baseViewport.height*25.4/72});const viewport=p.getViewport({scale:1.35*zoom});const canvas=canvasRef.current;const ctx=canvas.getContext('2d');if(!ctx)return;canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);canvas.style.width=`${viewport.width}px`;canvas.style.height=`${viewport.height}px`;await p.render({canvas,canvasContext:ctx,viewport}).promise}catch(e){setMessage(e instanceof Error?e.message:'Kunde inte rendera PDF-sidan.')}}
- function updatePage(next:PageState){if(!stateKey)return;setStates(current=>{const value={...current,[stateKey]:next};writeState(projectId,value);return value})}
+ function updatePage(next:PageState){if(!stateKey)return;setStates(current=>{const value={...current,[stateKey]:next};void saveSharedState(projectId,value);return value})}
  function pointFromEvent(e:React.PointerEvent<HTMLDivElement>):Point|null{const target=isPdf?canvasRef.current:imageRef.current;if(!target)return null;const rect=target.getBoundingClientRect();if(e.clientX<rect.left||e.clientX>rect.right||e.clientY<rect.top||e.clientY>rect.bottom)return null;return{x:(e.clientX-rect.left)/rect.width,y:(e.clientY-rect.top)/rect.height}}
  function snapPoint(origin:Point,point:Point,enabled:boolean):Point{if(!enabled)return point;const target=isPdf?canvasRef.current:imageRef.current;if(!target)return point;const rect=target.getBoundingClientRect();const dx=(point.x-origin.x)*rect.width,dy=(point.y-origin.y)*rect.height;const length=Math.hypot(dx,dy);if(!length)return point;const step=Math.PI/4;const angle=Math.round(Math.atan2(dy,dx)/step)*step;return{x:origin.x+Math.cos(angle)*length/rect.width,y:origin.y+Math.sin(angle)*length/rect.height}}
  function previewPoint(point:Point|null,shift:boolean){return point&&pending.length===1?snapPoint(pending[0],point,shift):point}
