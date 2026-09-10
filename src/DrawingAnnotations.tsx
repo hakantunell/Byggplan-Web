@@ -100,6 +100,7 @@ export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{
 
   useEffect(()=>{setAnnotations([]);setSelected(null);setPending(null);setPageNumber(1);void loadAnnotations()},[documentId,loadAnnotations]);
   useEffect(()=>{let cancelled=false;setDrawingState(readDrawingState(projectId));setShowMeasurements(true);void loadDrawingState(projectId).then(state=>{if(!cancelled)setDrawingState(state)});return()=>{cancelled=true}},[projectId,file.id]);
+  useEffect(()=>{let cancelled=false;const refresh=()=>{void loadDrawingState(projectId).then(state=>{if(!cancelled)setDrawingState(state)})};const onVisible=()=>{if(document.visibilityState==='visible')refresh()};window.addEventListener('focus',refresh);document.addEventListener('visibilitychange',onVisible);return()=>{cancelled=true;window.removeEventListener('focus',refresh);document.removeEventListener('visibilitychange',onVisible)}},[projectId]);
   useEffect(()=>{
     const key=DRAWING_STORAGE_PREFIX+projectId;
     const onStorage=(event:StorageEvent)=>{if(event.key===key)setDrawingState(readDrawingState(projectId))};
