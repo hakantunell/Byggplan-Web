@@ -8,8 +8,24 @@ type AnnotationNote={id:string;note:string;createdAt:string};
 type AnnotationPhoto={id:string;originalName:string;contentType:string;sizeBytes:number;createdAt:string;url:string};
 type Annotation={id:string;documentId:string;pageNumber:number;x:number;y:number;createdAt:string;notes:AnnotationNote[];photos:AnnotationPhoto[]};
 type Point={x:number;y:number;pageNumber:number};
+type DrawingPoint={x:number;y:number};
+type DrawingCalibration={a:DrawingPoint;b:DrawingPoint;distanceMm:number};
+type DrawingMeasurement={id:string;a:DrawingPoint;b:DrawingPoint;label:string;description?:string;visible:boolean};
+type DrawingPageState={calibration?:DrawingCalibration;scale?:number;measurements:DrawingMeasurement[]};
+type DrawingState=Record<string,DrawingPageState>;
 
 const annotationApi=(path:string)=>`/api${path.startsWith('/')?'':'/'}${path}`;
+const DRAWING_STORAGE_PREFIX='byggplan.drawingMeasurements.v1.';
+
+function readDrawingState(projectId:string):DrawingState{
+  if(!projectId)return {};
+  try{return JSON.parse(localStorage.getItem(DRAWING_STORAGE_PREFIX+projectId)||'{}') as DrawingState}catch{return {}}
+}
+function formatMm(value:number){
+  if(!Number.isFinite(value))return '';
+  if(value>=1000)return `${(value/1000).toLocaleString('sv-SE',{minimumFractionDigits:0,maximumFractionDigits:3})} m`;
+  return `${Math.round(value).toLocaleString('sv-SE')} mm`;
+}
 
 async function apiError(response:Response,fallback:string){
   const text=await response.text().catch(()=>'');
@@ -35,7 +51,7 @@ async function requestWithMethodFallback(url:string,init:RequestInit,fallbackLab
   throw new Error(`${fallbackLabel} (PUT HTTP 405, POST HTTP 405). ${diagnostic}`);
 }
 
-export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
+export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{projectId:string;documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
   const[annotations,setAnnotations]=useState<Annotation[]>([]);
   const[pageNumber,setPageNumber]=useState(1);
   const[pageCount,setPageCount]=useState(1);
@@ -46,6 +62,9 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
   const[busy,setBusy]=useState(false);
   const[loadError,setLoadError]=useState('');
   const[photoTarget,setPhotoTarget]=useState<{annotationId?:string;point?:Point}|null>(null);
+  const[showMeasurements,setShowMeasurements]=useState(true);
+  const[drawingState,setDrawingState]=useState<DrawingState>(()=>readDrawingState(projectId));
+  const[pdfPageMm,setPdfPageMm]=useState<{w:number;h:number}|null>(null);
   const fileInput=useRef<HTMLInputElement>(null);
   const surfaceRef=useRef<HTMLDivElement>(null);
   const canvasRef=useRef<HTMLCanvasElement>(null);
@@ -62,6 +81,12 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
   },[documentId]);
 
   useEffect(()=>{setAnnotations([]);setSelected(null);setPending(null);setPageNumber(1);void loadAnnotations()},[documentId,loadAnnotations]);
+  useEffect(()=>{setDrawingState(readDrawingState(projectId));setShowMeasurements(true)},[projectId,file.id]);
+  useEffect(()=>{
+    const key=DRAWING_STORAGE_PREFIX+projectId;
+    const onStorage=(event:StorageEvent)=>{if(event.key===key)setDrawingState(readDrawingState(projectId))};
+    window.addEventListener('storage',onStorage);return()=>window.removeEventListener('storage',onStorage);
+  },[projectId]);
 
   useEffect(()=>{
     if(!objectUrl||file.contentType!=='application/pdf')return;
@@ -70,7 +95,8 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
       try{
         task=pdfjs.getDocument(objectUrl);const pdf=await task.promise;if(cancelled)return;setPageCount(pdf.numPages);if(pageNumber>pdf.numPages)setPageNumber(1);
         const page=await pdf.getPage(Math.min(pageNumber,pdf.numPages));if(cancelled)return;
-        const base=page.getViewport({scale:1});const available=Math.max(360,(surfaceRef.current?.parentElement?.clientWidth||base.width)-6);const scale=Math.min(2,available/base.width);const viewport=page.getViewport({scale});
+        const base=page.getViewport({scale:1});setPdfPageMm({w:base.width*25.4/72,h:base.height*25.4/72});
+        const available=Math.max(360,(surfaceRef.current?.parentElement?.clientWidth||base.width)-6);const scale=Math.min(2,available/base.width);const viewport=page.getViewport({scale});
         const canvas=canvasRef.current;if(!canvas)return;const context=canvas.getContext('2d');if(!context)return;
         canvas.width=Math.floor(viewport.width);canvas.height=Math.floor(viewport.height);canvas.style.width=`${Math.floor(viewport.width)}px`;canvas.style.height=`${Math.floor(viewport.height)}px`;
         const render=page.render({canvasContext:context,viewport});await render.promise;
@@ -116,13 +142,37 @@ export function DrawingAnnotations({documentId,title,file,objectUrl}:{documentId
 
   const current=annotations.filter(item=>item.pageNumber===pageNumber);
   const selectedAnnotation=annotations.find(item=>item.id===selected);
+  const measurementPage=drawingState[`${file.id}:p${pageNumber}`];
+  const currentMeasurements=(measurementPage?.measurements||[]).filter(item=>item.visible!==false);
+  const measuredMm=(measurement:DrawingMeasurement)=>{
+    const calibration=measurementPage?.calibration;
+    if(calibration){
+      const rect=surfaceRef.current?.getBoundingClientRect();if(!rect)return 0;
+      const distance=(a:DrawingPoint,b:DrawingPoint)=>Math.hypot((b.x-a.x)*rect.width,(b.y-a.y)*rect.height);
+      const reference=distance(calibration.a,calibration.b);return reference?distance(measurement.a,measurement.b)*calibration.distanceMm/reference:0;
+    }
+    if(measurementPage?.scale&&pdfPageMm){
+      const dx=(measurement.b.x-measurement.a.x)*pdfPageMm.w,dy=(measurement.b.y-measurement.a.y)*pdfPageMm.h;
+      return Math.hypot(dx,dy)*measurementPage.scale;
+    }
+    return 0;
+  };
   const media=file.contentType.startsWith('image/')?<img className="drawingAnnotatedImage" src={objectUrl} alt={title}/>:<canvas ref={canvasRef}/>;
 
   return <div className="drawingAnnotationViewer">
-    {file.contentType==='application/pdf'&&pageCount>1&&<div className="drawingPageNav"><button disabled={pageNumber<=1} onClick={()=>setPageNumber(value=>Math.max(1,value-1))}>‹</button><span>Sida {pageNumber} av {pageCount}</span><button disabled={pageNumber>=pageCount} onClick={()=>setPageNumber(value=>Math.min(pageCount,value+1))}>›</button></div>}
+    {(file.contentType==='application/pdf'&&pageCount>1||currentMeasurements.length>0)&&<div className="drawingPageNav">
+      {file.contentType==='application/pdf'&&pageCount>1?<><button disabled={pageNumber<=1} onClick={()=>setPageNumber(value=>Math.max(1,value-1))}>‹</button><span>Sida {pageNumber} av {pageCount}</span><button disabled={pageNumber>=pageCount} onClick={()=>setPageNumber(value=>Math.min(pageCount,value+1))}>›</button></>:<span/>}
+      {currentMeasurements.length>0&&<button onClick={()=>setShowMeasurements(value=>!value)}>{showMeasurements?'◉ Dölj mått':'○ Visa mått'}</button>}
+    </div>}
     <div className="drawingAnnotationScroller">
       <div ref={surfaceRef} className="drawingAnnotationSurface" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd} onPointerLeave={onPointerEnd} onContextMenu={event=>event.preventDefault()}>
         {media}
+        {showMeasurements&&currentMeasurements.length>0&&<div aria-hidden="true" style={{position:'absolute',inset:0,pointerEvents:'none',zIndex:2}}>
+          <svg width="100%" height="100%" style={{position:'absolute',inset:0,overflow:'visible'}}>
+            {currentMeasurements.map(measurement=><g key={measurement.id}><line x1={`${measurement.a.x*100}%`} y1={`${measurement.a.y*100}%`} x2={`${measurement.b.x*100}%`} y2={`${measurement.b.y*100}%`} stroke="#c56f18" strokeWidth="2" vectorEffect="non-scaling-stroke"/><circle cx={`${measurement.a.x*100}%`} cy={`${measurement.a.y*100}%`} r="3" fill="#fff" stroke="#c56f18" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/><circle cx={`${measurement.b.x*100}%`} cy={`${measurement.b.y*100}%`} r="3" fill="#fff" stroke="#c56f18" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/></g>)}
+          </svg>
+          {currentMeasurements.map(measurement=>{const mm=measuredMm(measurement);const text=[measurement.label,mm?formatMm(mm):''].filter(Boolean).join(' · ');return text?<span key={measurement.id} style={{position:'absolute',left:`${(measurement.a.x+measurement.b.x)*50}%`,top:`${(measurement.a.y+measurement.b.y)*50}%`,transform:'translate(-50%,-50%)',background:'rgba(255,255,255,.82)',border:'1px solid rgba(197,111,24,.65)',borderRadius:'4px',padding:'1px 4px',fontSize:'11px',lineHeight:1.2,fontWeight:600,color:'#6d430d',whiteSpace:'nowrap',boxShadow:'0 1px 2px rgba(0,0,0,.08)'}}>{text}</span>:null})}
+        </div>}
         <div className="drawingMarkerLayer">{current.map(item=><button key={item.id} className="drawingMarker" style={{left:`${item.x*100}%`,top:`${item.y*100}%`}} onPointerDown={event=>event.stopPropagation()} onClick={event=>{event.stopPropagation();setPending(null);setSelected(item.id);setAddingNote(false);setNoteText('')}} title={`${item.photos.length} foto · ${item.notes.length} notis`}>{item.photos.length>0?'📷':'●'}<small>{item.photos.length+item.notes.length>1?item.photos.length+item.notes.length:''}</small></button>)}</div>
         {pending&&pending.pageNumber===pageNumber&&<div className="drawingAddMenu" style={{left:`${pending.x*100}%`,top:`${pending.y*100}%`}} onPointerDown={event=>event.stopPropagation()}><button onClick={()=>choosePhoto({point:pending})}>📷 Foto</button><button onClick={()=>{setAddingNote(true);setNoteText('')}}>📝 Notis</button><button className="close" onClick={()=>setPending(null)}>×</button></div>}
       </div>
