@@ -84,7 +84,7 @@ export function FieldResponsiveShell(){
     </aside>
     <section className={`fieldDesktopDetail ${selection.kind==='activities'?'activities':'document'}`}>
       <div className={selection.kind==='activities'?'fieldActivitiesPane':'fieldActivitiesPane hidden'}><App/></div>
-      {selection.kind==='document'&&<DocumentViewer document={selectedDocument} file={selectedFile} objectUrl={objectUrl} message={message}/>} 
+      {selection.kind==='document'&&<DocumentViewer projectId={projectId} document={selectedDocument} file={selectedFile} objectUrl={objectUrl} message={message}/>} 
     </section>
     <div className="fieldMobileDocuments"><ProjectDocumentsBar/></div>
   </div>;
@@ -94,10 +94,10 @@ function DocumentNode({document,selected,onSelect}:{document:ProjectDocument;sel
   return <button className={`fieldTreeDocument ${selected?'active':''}`} onClick={onSelect}><span>{document.attachments?.[0]?.contentType?.startsWith('image/')?'🖼':'📄'}</span><span>{document.title}</span></button>;
 }
 
-function DocumentViewer({document,file,objectUrl,message}:{document?:ProjectDocument;file?:Attachment;objectUrl:string;message:string}){
+function DocumentViewer({projectId,document,file,objectUrl,message}:{projectId:string;document?:ProjectDocument;file?:Attachment;objectUrl:string;message:string}){
   if(!document)return <div className="fieldDocumentEmpty">Dokumentet kunde inte hittas.</div>;
   const drawing=isDrawing(document);
-  return <div className="fieldDocumentViewer"><header><div><small>PROJEKTDOKUMENT</small><h1>{document.title}</h1>{document.description&&<p>{document.description}</p>}</div>{file&&<span>{file.originalName}</span>}</header><div className={`fieldDocumentCanvas ${drawing?'annotatable':''}`}>{message&&<div className="fieldDocumentEmpty">{message}</div>}{!message&&!file&&<div className="fieldDocumentEmpty">Dokumentet saknar fil.</div>}{!message&&file&&!objectUrl&&<div className="fieldDocumentEmpty">Öppnar dokument…</div>}{!message&&file&&objectUrl&&(drawing?<DrawingAnnotations documentId={document.id} title={document.title} file={file} objectUrl={objectUrl} apiBase={API_BASE}/>:file.contentType.startsWith('image/')?<img src={objectUrl} alt={document.title}/>:<iframe src={objectUrl} title={document.title}/>)}</div></div>;
+  return <div className="fieldDocumentViewer"><header><div><small>PROJEKTDOKUMENT</small><h1>{document.title}</h1>{document.description&&<p>{document.description}</p>}</div>{file&&<span>{file.originalName}</span>}</header><div className={`fieldDocumentCanvas ${drawing?'annotatable':''}`}>{message&&<div className="fieldDocumentEmpty">{message}</div>}{!message&&!file&&<div className="fieldDocumentEmpty">Dokumentet saknar fil.</div>}{!message&&file&&!objectUrl&&<div className="fieldDocumentEmpty">Öppnar dokument…</div>}{!message&&file&&objectUrl&&(drawing?<DrawingAnnotations projectId={projectId} documentId={document.id} title={document.title} file={file} objectUrl={objectUrl} apiBase={API_BASE}/>:file.contentType.startsWith('image/')?<img src={objectUrl} alt={document.title}/>:<iframe src={objectUrl} title={document.title}/>)}</div></div>;
 }
 
 function isDrawing(document:ProjectDocument){
