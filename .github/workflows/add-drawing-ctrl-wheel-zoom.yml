@@ -1,0 +1,45 @@
+name: Add drawing Ctrl wheel zoom
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-drawing-ctrl-wheel-zoom.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add Ctrl wheel zoom
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+          old='<div className={`drawingStageViewport ${tool!==\'hand\'?\'crosshair\':\'\'}`}><div ref={stageRef}'
+          new='<div className={`drawingStageViewport ${tool!==\'hand\'?\'crosshair\':\'\'}`} onWheel={e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(z=>Math.min(2.5,Math.max(.5,Math.round((z+(e.deltaY<0?.1:-.1))*10)/10)))}}><div ref={stageRef}'
+          assert old in s, 'drawingStageViewport target not found'
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+      - name: Build Studio
+        run: |
+          cd studio
+          npm install --progress=false
+          npm run build
+      - name: Commit result
+        shell: bash
+        run: |
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/add-drawing-ctrl-wheel-zoom.yml
+          git add studio/src/ProjectDocumentsWorkspace.tsx studio/package-lock.json
+          git commit -m "Add Ctrl wheel zoom in drawing view"
+          git push
