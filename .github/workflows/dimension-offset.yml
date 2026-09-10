@@ -14,9 +14,9 @@ jobs:
       - name: Patch files
         run: python3 .github/scripts/dimension_offset.py
       - name: Build app
-        run: npm ci && npm run build
+        run: npm install && npm run build
       - name: Build Studio
-        run: cd studio && npm ci && npm run build
+        run: cd studio && npm install && npm run build
       - name: Commit result and cleanup
         run: |
           git config user.name "byggplan-bot"
