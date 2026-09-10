@@ -1,0 +1,52 @@
+name: Fix drawing Ctrl wheel zoom handling
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-drawing-ctrl-wheel.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch Ctrl wheel handling
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+          old="const canvasRef=useRef<HTMLCanvasElement|null>(null);const imageRef=useRef<HTMLImageElement|null>(null);const stageRef=useRef<HTMLDivElement|null>(null);"
+          new="const canvasRef=useRef<HTMLCanvasElement|null>(null);const imageRef=useRef<HTMLImageElement|null>(null);const stageRef=useRef<HTMLDivElement|null>(null);const viewportRef=useRef<HTMLDivElement|null>(null);"
+          assert old in s, 'refs block not found'
+          s=s.replace(old,new,1)
+          marker="useEffect(()=>{if(isPdf&&assetUrl)void renderPdf()},[isPdf,assetUrl,page,zoom]);"
+          extra=marker+"\n useEffect(()=>{const el=viewportRef.current;if(!el)return;const onWheel=(e:WheelEvent)=>{if(!e.ctrlKey)return;e.preventDefault();e.stopPropagation();setZoom(z=>Math.min(2.5,Math.max(.5,Math.round((z+(e.deltaY<0?.1:-.1))*10)/10)))};el.addEventListener('wheel',onWheel,{passive:false});return()=>el.removeEventListener('wheel',onWheel)},[loading]);"
+          assert marker in s, 'render effect marker not found'
+          s=s.replace(marker,extra,1)
+          old_view="<div className={`drawingStageViewport ${tool!=='hand'?'crosshair':''}`} onWheel={e=>{if(!e.ctrlKey)return;e.preventDefault();setZoom(z=>Math.min(2.5,Math.max(.5,Math.round((z+(e.deltaY<0?.1:-.1))*10)/10)))}}>"
+          new_view="<div ref={viewportRef} className={`drawingStageViewport ${tool!=='hand'?'crosshair':''}`}>"
+          assert old_view in s, 'viewport wheel handler not found'
+          s=s.replace(old_view,new_view,1)
+          p.write_text(s)
+          PY
+      - name: Build Studio
+        run: |
+          cd studio
+          npm install --progress=false
+          npm run build
+      - name: Commit result and cleanup workflow
+        run: |
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/fix-drawing-ctrl-wheel.yml
+          git add studio/src/ProjectDocumentsWorkspace.tsx studio/package-lock.json
+          git commit -m "Prevent browser zoom during drawing Ctrl wheel zoom"
+          git push
