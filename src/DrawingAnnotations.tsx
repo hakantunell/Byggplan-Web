@@ -11,7 +11,8 @@ type Point={x:number;y:number;pageNumber:number};
 type DrawingPoint={x:number;y:number};
 type DrawingCalibration={a:DrawingPoint;b:DrawingPoint;distanceMm:number};
 type DrawingMeasurement={id:string;a:DrawingPoint;b:DrawingPoint;label:string;description?:string;visible:boolean;offset?:number};
-type DrawingPageState={calibration?:DrawingCalibration;scale?:number;measurements:DrawingMeasurement[]};
+type DrawingAngle={id:string;center:DrawingPoint;a:DrawingPoint;b:DrawingPoint;label:string;description?:string;visible:boolean;labelOffset?:DrawingPoint};
+type DrawingPageState={calibration?:DrawingCalibration;scale?:number;measurements:DrawingMeasurement[];angles?:DrawingAngle[]};
 type DrawingState=Record<string,DrawingPageState>;
 
 const annotationApi=(path:string)=>`/api${path.startsWith('/')?'':'/'}${path}`;
@@ -66,6 +67,13 @@ function ReadOnlyDimensionOverlay({targetRef,measurements,measuredMm}:{targetRef
   if(!size.w||!size.h)return null;const min=Math.max(1,Math.min(size.w,size.h));
   const geometry=(m:DrawingMeasurement)=>{const ax=m.a.x*size.w,ay=m.a.y*size.h,bx=m.b.x*size.w,by=m.b.y*size.h,dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,off=(m.offset||0)*min;return{ax,ay,bx,by,a2x:ax+nx*off,a2y:ay+ny*off,b2x:bx+nx*off,b2y:by+ny*off,mx:(ax+bx)/2+nx*off,my:(ay+by)/2+ny*off}};
   return <svg width={size.w} height={size.h} aria-hidden="true" style={{position:'absolute',left:0,top:0,overflow:'visible',pointerEvents:'none',zIndex:2}}>{measurements.map(m=>{const g=geometry(m),mm=measuredMm(m),text=[m.label,mm?formatMm(mm):''].filter(Boolean).join(' · '),w=Math.max(40,text.length*6+10);return <g key={m.id}>{(m.offset||0)!==0&&<><line x1={g.ax} y1={g.ay} x2={g.a2x} y2={g.a2y} stroke="#c56f18" strokeWidth="1"/><line x1={g.bx} y1={g.by} x2={g.b2x} y2={g.b2y} stroke="#c56f18" strokeWidth="1"/></>}<line x1={g.a2x} y1={g.a2y} x2={g.b2x} y2={g.b2y} stroke="#c56f18" strokeWidth="1.5"/><circle cx={g.a2x} cy={g.a2y} r="2.5" fill="#fff" stroke="#c56f18" strokeWidth="1.4"/><circle cx={g.b2x} cy={g.b2y} r="2.5" fill="#fff" stroke="#c56f18" strokeWidth="1.4"/>{text&&<><rect x={g.mx-w/2} y={g.my-9} width={w} height="18" rx="4" fill="rgba(255,255,255,.86)" stroke="rgba(197,111,24,.65)"/><text x={g.mx} y={g.my+3.7} textAnchor="middle" fontSize="11" fontWeight="600" fill="#6d430d">{text}</text></>}</g>})}</svg>;
+}
+
+function ReadOnlyAngleOverlay({targetRef,angles}:{targetRef:React.RefObject<HTMLCanvasElement|null>|React.RefObject<HTMLImageElement|null>;angles:DrawingAngle[]}){
+  const[size,setSize]=useState({w:0,h:0});
+  useEffect(()=>{const target=targetRef.current;if(!target)return;const update=()=>{const r=target.getBoundingClientRect();setSize({w:r.width,h:r.height})};update();const ro=new ResizeObserver(update);ro.observe(target);return()=>ro.disconnect()},[targetRef.current]);
+  if(!size.w||!size.h)return null;
+  return <svg width={size.w} height={size.h} aria-hidden="true" style={{position:'absolute',left:0,top:0,overflow:'visible',pointerEvents:'none',zIndex:2}}>{angles.map(a=>{const cx=a.center.x*size.w,cy=a.center.y*size.h,ax=a.a.x*size.w,ay=a.a.y*size.h,bx=a.b.x*size.w,by=a.b.y*size.h,a1=Math.atan2(ay-cy,ax-cx),a2=Math.atan2(by-cy,bx-cx);let d=a2-a1;while(d<=-Math.PI)d+=Math.PI*2;while(d>Math.PI)d-=Math.PI*2;const deg=Math.abs(d)*180/Math.PI,r=Math.min(34,Math.max(18,Math.min(Math.hypot(ax-cx,ay-cy),Math.hypot(bx-cx,by-cy))*.24)),mid=a1+d/2,endA={x:cx+Math.cos(a1)*r,y:cy+Math.sin(a1)*r},endB={x:cx+Math.cos(a2)*r,y:cy+Math.sin(a2)*r},arc=`M ${endA.x} ${endA.y} A ${r} ${r} 0 0 ${d>=0?1:0} ${endB.x} ${endB.y}`,off=a.labelOffset||{x:0,y:0},lx=cx+Math.cos(mid)*(r+20)+off.x*size.w,ly=cy+Math.sin(mid)*(r+20)+off.y*size.h,text=[a.label,`${deg.toFixed(1).replace('.',',')}°`].filter(Boolean).join(' · '),w=Math.max(40,text.length*6+10);return <g key={a.id}><line x1={cx} y1={cy} x2={ax} y2={ay} stroke="#c56f18" strokeWidth="1.5"/><line x1={cx} y1={cy} x2={bx} y2={by} stroke="#c56f18" strokeWidth="1.5"/><path d={arc} fill="none" stroke="#c56f18" strokeWidth="1.5"/><circle cx={cx} cy={cy} r="2.8" fill="#fff" stroke="#c56f18" strokeWidth="1.4"/><rect x={lx-w/2} y={ly-9} width={w} height="18" rx="4" fill="rgba(255,255,255,.86)" stroke="rgba(197,111,24,.65)"/><text x={lx} y={ly+3.7} textAnchor="middle" fontSize="11" fontWeight="600" fill="#6d430d">{text}</text></g>})}</svg>;
 }
 
 export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{projectId:string;documentId:string;title:string;file:Attachment;objectUrl:string;apiBase:string}){
@@ -163,6 +171,7 @@ export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{
   const selectedAnnotation=annotations.find(item=>item.id===selected);
   const measurementPage=drawingState[`${file.id}:p${pageNumber}`];
   const currentMeasurements=(measurementPage?.measurements||[]).filter(item=>item.visible!==false);
+  const currentAngles=(measurementPage?.angles||[]).filter(item=>item.visible!==false);
   const measuredMm=(measurement:DrawingMeasurement)=>{
     const calibration=measurementPage?.calibration;
     if(calibration){
@@ -179,14 +188,15 @@ export function DrawingAnnotations({projectId,documentId,title,file,objectUrl}:{
   const media=file.contentType.startsWith('image/')?<img ref={imageRef} className="drawingAnnotatedImage" src={objectUrl} alt={title}/>:<canvas ref={canvasRef}/>;
 
   return <div className="drawingAnnotationViewer">
-    {(file.contentType==='application/pdf'&&pageCount>1||currentMeasurements.length>0)&&<div className="drawingPageNav">
+    {(file.contentType==='application/pdf'&&pageCount>1||currentMeasurements.length>0||currentAngles.length>0)&&<div className="drawingPageNav">
       {file.contentType==='application/pdf'&&pageCount>1?<><button disabled={pageNumber<=1} onClick={()=>setPageNumber(value=>Math.max(1,value-1))}>‹</button><span>Sida {pageNumber} av {pageCount}</span><button disabled={pageNumber>=pageCount} onClick={()=>setPageNumber(value=>Math.min(pageCount,value+1))}>›</button></>:<span/>}
-      {currentMeasurements.length>0&&<button onClick={()=>setShowMeasurements(value=>!value)}>{showMeasurements?'◉ Dölj mått':'○ Visa mått'}</button>}
+      {(currentMeasurements.length>0||currentAngles.length>0)&&<button onClick={()=>setShowMeasurements(value=>!value)}>{showMeasurements?'◉ Dölj mått':'○ Visa mått'}</button>}
     </div>}
     <div className="drawingAnnotationScroller">
       <div ref={surfaceRef} className="drawingAnnotationSurface" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd} onPointerLeave={onPointerEnd} onContextMenu={event=>event.preventDefault()}>
         {media}
         {showMeasurements&&currentMeasurements.length>0&&<ReadOnlyDimensionOverlay targetRef={file.contentType.startsWith('image/')?imageRef:canvasRef} measurements={currentMeasurements} measuredMm={measuredMm}/>}
+        {showMeasurements&&currentAngles.length>0&&<ReadOnlyAngleOverlay targetRef={file.contentType.startsWith('image/')?imageRef:canvasRef} angles={currentAngles}/>}
         <div className="drawingMarkerLayer">{current.map(item=><button key={item.id} className="drawingMarker" style={{left:`${item.x*100}%`,top:`${item.y*100}%`}} onPointerDown={event=>event.stopPropagation()} onClick={event=>{event.stopPropagation();setPending(null);setSelected(item.id);setAddingNote(false);setNoteText('')}} title={`${item.photos.length} foto · ${item.notes.length} notis`}>{item.photos.length>0?'📷':'●'}<small>{item.photos.length+item.notes.length>1?item.photos.length+item.notes.length:''}</small></button>)}</div>
         {pending&&pending.pageNumber===pageNumber&&<div className="drawingAddMenu" style={{left:`${pending.x*100}%`,top:`${pending.y*100}%`}} onPointerDown={event=>event.stopPropagation()}><button onClick={()=>choosePhoto({point:pending})}>📷 Foto</button><button onClick={()=>{setAddingNote(true);setNoteText('')}}>📝 Notis</button><button className="close" onClick={()=>setPending(null)}>×</button></div>}
       </div>
