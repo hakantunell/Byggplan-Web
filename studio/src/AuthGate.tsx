@@ -1,7 +1,7 @@
 import {createContext,useContext,useEffect,useState,type FormEvent,type ReactNode} from 'react';
 import './auth-gate.css';
 
-export type AuthUser={id:string;email:string;displayName:string;globalRoles:string[];projects:Array<{id:string;name:string;roles:string[]}>};
+export type AuthUser={id:string;email:string;displayName:string;globalRoles:string[];systemAdmin?:boolean;workspaces?:Array<{id:string;name:string;role:string}>;projects:Array<{id:string;name:string;workspaceId?:string;workspaceName?:string;roles:string[]}>};
 type Status={configured:boolean;bootstrapReady:boolean};
 type AuthContextValue={user:AuthUser|null;configured:boolean};
 const AuthContext=createContext<AuthContextValue>({user:null,configured:false});

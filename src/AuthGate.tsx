@@ -1,7 +1,7 @@
 import {useEffect,useState,type FormEvent,type ReactNode} from 'react';
 import './auth-gate.css';
 
-type User={id:string;email:string;displayName:string;globalRoles:string[];projects:Array<{id:string;name:string;roles:string[]}>};
+type User={id:string;email:string;displayName:string;globalRoles:string[];systemAdmin?:boolean;workspaces?:Array<{id:string;name:string;role:string}>;projects:Array<{id:string;name:string;workspaceId?:string;workspaceName?:string;roles:string[]}>};
 type Status={configured:boolean;bootstrapReady:boolean};
 
 export function AuthGate({children}:{children:ReactNode}){
@@ -13,7 +13,7 @@ export function AuthGate({children}:{children:ReactNode}){
  if(status&&!status.configured&&status.bootstrapReady)return <Bootstrap onDone={u=>{setUser(u);setStatus({...status,configured:true})}}/>;
  if(status&&!status.configured&&!status.bootstrapReady)return <>{children}<div className="authDevNotice">Inloggning ej aktiverad ännu</div></>;
  if(!user)return <Login onDone={setUser}/>;
- const isAdmin=user.globalRoles.includes('admin');const kaOnly=!isAdmin&&user.projects.length>0&&user.projects.every(p=>p.roles.includes('KA')&&!p.roles.some(r=>['BH','worker','supervisor'].includes(r)));
+ const isAdmin=Boolean(user.systemAdmin||user.globalRoles.includes('admin'));const kaOnly=!isAdmin&&user.projects.length>0&&user.projects.every(p=>p.roles.includes('KA')&&!p.roles.some(r=>['BH','worker','supervisor'].includes(r)));
  if(kaOnly)return <div className="authCenter"><div className="authCard"><div className="authLogo">BP</div><small>KA-KONTO</small><h1>Kontrollplan i Studio</h1><p>Det här kontot har rollen Kontrollansvarig och arbetar i Kontrollplan-vyn i ByggPlan Studio.</p><a className="authPrimaryLink" href="https://studio.byggplan.tunell.org">Öppna ByggPlan Studio</a><button className="authSecondaryButton" onClick={async()=>{await fetch('/api/auth/logout',{method:'POST'});setUser(null)}}>Logga ut</button></div></div>;
  return <>{children}<div className="authUserBadge"><span><b>{user.displayName}</b><small>{user.email}</small></span><button onClick={()=>setChangePassword(true)}>Byt lösenord</button><button onClick={async()=>{await fetch('/api/auth/logout',{method:'POST'});setUser(null)}}>Logga ut</button></div>{changePassword&&<ChangePasswordModal onClose={()=>setChangePassword(false)}/>}</>;
 }
