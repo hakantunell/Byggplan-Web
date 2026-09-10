@@ -1,0 +1,30 @@
+name: Workspace system administration UI
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/workspace-ui-patch.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply workspace UI patch
+        run: python scripts/workspace_ui_patch.py
+      - name: Build app
+        run: npm install --progress=false && npm run build
+      - name: Build Studio
+        working-directory: studio
+        run: npm install --progress=false && npm run build
+      - name: Commit result and cleanup
+        run: |
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          rm .github/workflows/workspace-ui-patch.yml scripts/workspace_ui_patch.py
+          git add studio/src/AuthGate.tsx studio/src/StudioShell.tsx studio/src/MasterProjectsView.tsx src/AuthGate.tsx .github/workflows/workspace-ui-patch.yml scripts/workspace_ui_patch.py
+          git commit -m "Add workspace-aware system administration UI"
+          git push
