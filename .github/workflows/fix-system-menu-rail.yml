@@ -1,0 +1,78 @@
+name: Fix system menu rail
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-system-menu-rail.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch system menu and rail layout
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('studio/src/StudioShell.tsx')
+          s=p.read_text()
+          old="const openBackup=()=>{if(!kaOnly)setView('backup')};window.addEventListener('byggplan:open-users',openUsers);window.addEventListener('byggplan:open-control-plan',openControlPlan);window.addEventListener('byggplan:open-graphical-plan',openGraphicalPlan);window.addEventListener('byggplan:open-backup',openBackup);return()=>{window.removeEventListener('byggplan:open-users',openUsers);window.removeEventListener('byggplan:open-control-plan',openControlPlan);window.removeEventListener('byggplan:open-graphical-plan',openGraphicalPlan);window.removeEventListener('byggplan:open-backup',openBackup)}}"
+          new="const openBackup=()=>{if(!kaOnly)setView('backup')};const openSystem=()=>{if(!kaOnly&&isSystemAdmin)setView('system-workspaces')};window.addEventListener('byggplan:open-users',openUsers);window.addEventListener('byggplan:open-control-plan',openControlPlan);window.addEventListener('byggplan:open-graphical-plan',openGraphicalPlan);window.addEventListener('byggplan:open-backup',openBackup);window.addEventListener('byggplan:open-system',openSystem);return()=>{window.removeEventListener('byggplan:open-users',openUsers);window.removeEventListener('byggplan:open-control-plan',openControlPlan);window.removeEventListener('byggplan:open-graphical-plan',openGraphicalPlan);window.removeEventListener('byggplan:open-backup',openBackup);window.removeEventListener('byggplan:open-system',openSystem)}}"
+          assert old in s
+          s=s.replace(old,new,1)
+          s=s.replace("},[kaOnly]);","},[kaOnly,isSystemAdmin]);",1)
+          old2='if(view===\'project\')return <div className="studioShell view-project">'
+          new2='if(view===\'project\')return <div className="studioShell view-project" data-system-admin={isSystemAdmin?\'true\':\'false\'}>'
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+
+          p=Path('studio/src/project-utility-rail.ts')
+          s=p.read_text()
+          old="function ensureRailButtons(){const rails=Array.from(document.querySelectorAll<HTMLElement>('.rail'));for(const rail of rails){if(rail.classList.contains('kaRail'))continue;wireUsers(rail);for(const item of utilityItems){"
+          new="function ensureRailButtons(){const rails=Array.from(document.querySelectorAll<HTMLElement>('.rail'));for(const rail of rails){if(rail.classList.contains('kaRail'))continue;wireUsers(rail);const projectRail=Boolean(rail.closest('.projectWorkspace'));const systemAdmin=Boolean(document.querySelector('.studioShell.view-project[data-system-admin=\"true\"]'));if(projectRail&&systemAdmin&&!rail.querySelector('.projectSystemRailButton')){const button=document.createElement('button');button.type='button';button.className='projectSystemRailButton';button.title='Systemadministration · Projektytor';button.innerHTML='<span class=\"projectUtilityRailIcon\">🛡️</span><span>System</span>';button.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('byggplan:open-system')));rail.appendChild(button)}for(const item of utilityItems){"
+          assert old in s
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('studio/src/project-utility-rail.css')
+          s=p.read_text()
+          s += "\n.rail .projectSystemRailButton{order:15}.rail .projectSystemRailButton .projectUtilityRailIcon{font-size:19px;line-height:1}\n"
+          p.write_text(s)
+
+          p=Path('studio/src/studio-shell.css')
+          s=p.read_text()
+          s += "\n/* Keep the main navigation readable when the System item is present. */\n.controlPlanStudioFrame{grid-template-columns:84px minmax(0,1fr)}\n.controlPlanRail{padding:8px 7px!important;gap:3px!important}\n.controlPlanRail>button{padding:6px 3px!important;gap:3px!important;font-size:19px!important;line-height:1!important}\n.controlPlanRail>button>span:last-child{font-size:10px!important;line-height:1.15!important;max-width:72px;white-space:normal;overflow-wrap:normal;word-break:normal;text-align:center}\n@media(max-width:900px){.controlPlanStudioFrame{grid-template-columns:84px minmax(0,1fr)}}\n"
+          p.write_text(s)
+
+          p=Path('studio/src/project-workspace-v2.css')
+          s=p.read_text()
+          s += "\n/* Same rail geometry in Project view as in the other Studio views. */\n.projectWorkspace{grid-template-columns:84px 340px minmax(0,1fr)}\n.projectWorkspace>.rail{padding:8px 7px;gap:3px}\n.projectWorkspace>.rail button{padding:6px 3px;gap:3px;font-size:19px;line-height:1}\n.projectWorkspace>.rail button>span:last-child{font-size:10px;line-height:1.15;max-width:72px;white-space:normal;text-align:center}\n@media(max-width:1050px){.projectWorkspace{grid-template-columns:84px 285px minmax(0,1fr)}}\n"
+          p.write_text(s)
+
+          p=Path('studio/src/project-utility-rail.css')
+          s=p.read_text().replace('.projectWorkspace.projectUtilityView{grid-template-columns:68px minmax(0,1fr)}','.projectWorkspace.projectUtilityView{grid-template-columns:84px minmax(0,1fr)}').replace('@media(max-width:1050px){.projectWorkspace.projectUtilityView{grid-template-columns:60px minmax(0,1fr)}}','@media(max-width:1050px){.projectWorkspace.projectUtilityView{grid-template-columns:84px minmax(0,1fr)}}')
+          p.write_text(s)
+          PY
+      - name: Build app
+        run: npm ci && npm run build
+      - name: Build Studio
+        run: cd studio && npm ci && npm run build
+      - name: Commit result and cleanup
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-system-menu-rail.yml
+          rm -f .github/workflows/compact-project-documents-header.yml
+          git config user.name 'byggplan-bot'
+          git config user.email 'byggplan-bot@users.noreply.github.com'
+          git add -A
+          git commit -m 'Fix system menu visibility and rail spacing'
+          git push
