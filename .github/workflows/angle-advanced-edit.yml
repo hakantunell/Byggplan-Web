@@ -31,3 +31,4 @@ jobs:
           git add studio/src/ProjectDocumentsWorkspace.tsx src/DrawingAnnotations.tsx .github/workflows/angle-advanced-edit.yml scripts/angle_advanced_patch.py
           git commit -m "Improve angle editing and add drawing object snapping"
           git push
+# retry after TypeScript fix
