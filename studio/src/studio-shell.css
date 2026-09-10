@@ -146,3 +146,10 @@ body{overflow-x:hidden}
   .controlPlanPageHeader{align-items:flex-start}
   .controlPlanPageHeader h1{font-size:22px}
 }
+
+/* Keep the main navigation readable when the System item is present. */
+.controlPlanStudioFrame{grid-template-columns:84px minmax(0,1fr)}
+.controlPlanRail{padding:8px 7px!important;gap:3px!important}
+.controlPlanRail>button{padding:6px 3px!important;gap:3px!important;font-size:19px!important;line-height:1!important}
+.controlPlanRail>button>span:last-child{font-size:10px!important;line-height:1.15!important;max-width:72px;white-space:normal;overflow-wrap:normal;word-break:normal;text-align:center}
+@media(max-width:900px){.controlPlanStudioFrame{grid-template-columns:84px minmax(0,1fr)}}
