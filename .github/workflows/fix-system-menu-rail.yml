@@ -63,9 +63,9 @@ jobs:
           p.write_text(s)
           PY
       - name: Build app
-        run: npm ci && npm run build
+        run: npm install --no-audit --no-fund && npm run build
       - name: Build Studio
-        run: cd studio && npm ci && npm run build
+        run: cd studio && npm install --no-audit --no-fund && npm run build
       - name: Commit result and cleanup
         shell: bash
         run: |
