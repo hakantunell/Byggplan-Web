@@ -1,0 +1,35 @@
+name: Run compact project documents header patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/run-compact-header-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch files
+        run: python3 .github/scripts/compact_project_documents_header.py
+      - name: Build Studio
+        working-directory: studio
+        run: |
+          npm install --progress=false
+          npm run build
+      - name: Commit result
+        run: |
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/run-compact-header-patch.yml
+          git rm .github/scripts/compact_project_documents_header.py
+          git add studio/src/ProjectDocumentsWorkspace.tsx studio/src/project-documents-workspace.css studio/package-lock.json
+          git commit -m "Compact project documents controls into header"
+          git push
