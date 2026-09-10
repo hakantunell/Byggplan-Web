@@ -1,0 +1,47 @@
+name: Fix magnifier crosshair alignment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-magnifier-crosshair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Align magnifier crosshair
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+          old="ctx.drawImage(target,sx-span/2,sy-span/2,span,span,0,0,out.width,out.height);ctx.beginPath();ctx.moveTo(out.width/2,0);ctx.lineTo(out.width/2,out.height);ctx.moveTo(0,out.height/2);ctx.lineTo(out.width,out.height/2);ctx.strokeStyle='rgba(194,105,26,.9)';ctx.lineWidth=1;ctx.stroke();"
+          new="ctx.drawImage(target,sx-span/2,sy-span/2,span,span,0,0,out.width,out.height);"
+          assert old in s, 'magnifier canvas crosshair block not found'
+          p.write_text(s.replace(old,new,1))
+
+          p=Path('studio/src/project-documents-workspace.css')
+          c=p.read_text()
+          c += "\n/* Keep magnifier crosshair and center marker on the exact same CSS center. */\n.drawingMagnifier::before,.drawingMagnifier::after{content:\"\";position:absolute;z-index:21;pointer-events:none;background:rgba(194,105,26,.9)}\n.drawingMagnifier::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px)}\n.drawingMagnifier::after{top:50%;left:0;right:0;height:1px;transform:translateY(-.5px)}\n.drawingMagnifier>span{z-index:22}\n"
+          p.write_text(c)
+          PY
+      - name: Build Studio
+        run: |
+          cd studio
+          npm install --progress=false
+          npm run build
+      - name: Commit result
+        run: |
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/fix-magnifier-crosshair.yml
+          git add studio/src/ProjectDocumentsWorkspace.tsx studio/src/project-documents-workspace.css studio/package-lock.json
+          git commit -m "Align magnifier crosshair with center marker"
+          git push
