@@ -1,0 +1,86 @@
+name: Apply drawing measurement UX patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/drawing-measurement-ux-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch drawing measurement UX
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+
+          s=s.replace("type Measurement={id:string;a:Point;b:Point;label:string;visible:boolean};\ntype PageState={calibration?:Calibration;measurements:Measurement[]};", "type Measurement={id:string;a:Point;b:Point;label:string;description?:string;visible:boolean};\ntype PageState={calibration?:Calibration;scale?:number;measurements:Measurement[]};")
+
+          old="const[documents,setDocuments]=useState<ProjectDocument[]>([]);const[loading,setLoading]=useState(true);const[message,setMessage]=useState('');const[selectedDoc,setSelectedDoc]=useState('');const[selectedFile,setSelectedFile]=useState('');const[page,setPage]=useState(1);const[pageCount,setPageCount]=useState(1);const[tool,setTool]=useState<Tool>('hand');const[showMeasurements,setShowMeasurements]=useState(true);const[pending,setPending]=useState<Point[]>([]);const[states,setStates]=useState<DrawingState>(()=>readState(projectId));const[assetUrl,setAssetUrl]=useState('');const[isPdf,setIsPdf]=useState(false);const[zoom,setZoom]=useState(1);"
+          new="const[documents,setDocuments]=useState<ProjectDocument[]>([]);const[loading,setLoading]=useState(true);const[message,setMessage]=useState('');const[selectedDoc,setSelectedDoc]=useState('');const[selectedFile,setSelectedFile]=useState('');const[page,setPage]=useState(1);const[pageCount,setPageCount]=useState(1);const[tool,setTool]=useState<Tool>('hand');const[showMeasurements,setShowMeasurements]=useState(true);const[pending,setPending]=useState<Point[]>([]);const[cursorPoint,setCursorPoint]=useState<Point|null>(null);const[states,setStates]=useState<DrawingState>(()=>readState(projectId));const[assetUrl,setAssetUrl]=useState('');const[isPdf,setIsPdf]=useState(false);const[zoom,setZoom]=useState(1);const[pdfPageMm,setPdfPageMm]=useState<{w:number;h:number}|null>(null);"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          s=s.replace("const p=await pdf.getPage(current);const viewport=p.getViewport({scale:1.35*zoom});", "const p=await pdf.getPage(current);const baseViewport=p.getViewport({scale:1});setPdfPageMm({w:baseViewport.width*25.4/72,h:baseViewport.height*25.4/72});const viewport=p.getViewport({scale:1.35*zoom});",1)
+
+          old="if(!pageState.calibration){setMessage('Kalibrera skalan innan du mäter.');setTool('calibrate');return}const label=window.prompt('Namn på måttet (valfritt):','')||'';updatePage({...pageState,measurements:[...pageState.measurements,{id:crypto.randomUUID(),a:next[0],b:next[1],label,visible:true}]});"
+          new="if(!pageState.calibration&&!pageState.scale){setMessage('Välj ritningsskala eller kalibrera innan du mäter.');return}updatePage({...pageState,measurements:[...pageState.measurements,{id:crypto.randomUUID(),a:next[0],b:next[1],label:'',description:'',visible:true}]});"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="function measuredMm(m:Measurement){const c=pageState.calibration;if(!c)return 0;const target=isPdf?canvasRef.current:imageRef.current;if(!target)return 0;const rect=target.getBoundingClientRect();const d=(a:Point,b:Point)=>Math.hypot((b.x-a.x)*rect.width,(b.y-a.y)*rect.height);const calPx=d(c.a,c.b);return calPx?d(m.a,m.b)*c.distanceMm/calPx:0}"
+          new="function measuredMm(m:Measurement){const target=isPdf?canvasRef.current:imageRef.current;if(!target)return 0;const rect=target.getBoundingClientRect();const d=(a:Point,b:Point)=>Math.hypot((b.x-a.x)*rect.width,(b.y-a.y)*rect.height);const c=pageState.calibration;if(c){const calPx=d(c.a,c.b);return calPx?d(m.a,m.b)*c.distanceMm/calPx:0}if(pageState.scale&&isPdf&&pdfPageMm){const dx=(m.b.x-m.a.x)*pdfPageMm.w,dy=(m.b.y-m.a.y)*pdfPageMm.h;return Math.hypot(dx,dy)*pageState.scale}return 0}"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          marker="function toggleMeasurement(id:string){updatePage({...pageState,measurements:pageState.measurements.map(m=>m.id===id?{...m,visible:!m.visible}:m)})}"
+          insert=marker+"\n function editMeasurement(id:string,patch:Partial<Pick<Measurement,'label'|'description'>>){updatePage({...pageState,measurements:pageState.measurements.map(m=>m.id===id?{...m,...patch}:m)})}\n function chooseScale(value:string){if(value==='manual'){setTool('calibrate');setPending([]);return}const scale=Number(value);if(!Number.isFinite(scale)||scale<=0)return;updatePage({...pageState,scale,calibration:undefined});setTool('hand');setPending([]);setMessage(`Skala 1:${scale} används för den här sidan.`)}"
+          assert marker in s
+          s=s.replace(marker,insert,1)
+
+          s=s.replace("disabled={!pageState.calibration}>📏 Mät</button>", "disabled={!pageState.calibration&&!pageState.scale}>📏 Mät</button>",1)
+
+          old="<div className={`drawingStageViewport ${tool!=='hand'?'crosshair':''}`}><div ref={stageRef} className=\"drawingStage\" onPointerDown={handleStageClick}>{isPdf?<canvas ref={canvasRef}/>:<img ref={imageRef} src={assetUrl} alt={document?.title||'Ritning'} style={{width:`${zoom*100}%`}}/>}<DrawingOverlay"
+          new="<div className={`drawingStageViewport ${tool!=='hand'?'crosshair':''}`}><div ref={stageRef} className=\"drawingStage\" onPointerDown={handleStageClick} onPointerMove={e=>setCursorPoint(tool==='hand'?null:pointFromEvent(e))} onPointerLeave={()=>setCursorPoint(null)}>{isPdf?<canvas ref={canvasRef}/>:<img ref={imageRef} src={assetUrl} alt={document?.title||'Ritning'} style={{width:`${zoom*100}%`}}/>}<DrawingOverlay"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          old="measuredMm={measuredMm}/></div></div><aside className=\"measurementPanel\"><div><small>SKALA</small>{pageState.calibration?<><b>Kalibrerad</b><span>{formatMm(pageState.calibration.distanceMm)} referens</span><button onClick={()=>setTool('calibrate')}>Kalibrera om</button></>:<><b>Inte kalibrerad</b><span>Välj två kända punkter och ange verkligt avstånd.</span><button className=\"primary\" onClick={()=>setTool('calibrate')}>Kalibrera</button></>}</div><div><small>SPARADE MÅTT</small>{pageState.measurements.length?pageState.measurements.map(m=><article key={m.id}><button className=\"visibility\" onClick={()=>toggleMeasurement(m.id)}>{m.visible?'◉':'○'}</button><span><b>{m.label||formatMm(measuredMm(m))}</b>{m.label&&<small>{formatMm(measuredMm(m))}</small>}</span><button className=\"delete\" onClick={()=>removeMeasurement(m.id)}>×</button></article>):<p>Inga mått sparade på den här sidan.</p>}</div></aside>"
+          new="measuredMm={measuredMm}/><Magnifier target={isPdf?canvasRef.current:imageRef.current} point={cursorPoint} visible={tool!=='hand'}/></div></div><aside className=\"measurementPanel\"><div><small>SKALA</small>{isPdf&&<label className=\"drawingScaleSelect\"><span>Ritningsskala</span><select value={pageState.calibration?'manual':String(pageState.scale||'')} onChange={e=>chooseScale(e.target.value)}><option value=\"\">Välj skala…</option><option value=\"20\">1:20</option><option value=\"25\">1:25</option><option value=\"50\">1:50</option><option value=\"100\">1:100</option><option value=\"200\">1:200</option><option value=\"400\">1:400</option><option value=\"500\">1:500</option><option value=\"1000\">1:1000</option><option value=\"manual\">Manuell kalibrering…</option></select></label>}{pageState.calibration?<><b>Manuellt kalibrerad</b><span>{formatMm(pageState.calibration.distanceMm)} referens</span><button onClick={()=>setTool('calibrate')}>Kalibrera om</button></>:pageState.scale?<><b>Skala 1:{pageState.scale}</b><span>Beräknas från PDF-sidans verkliga utskriftsstorlek.</span><button onClick={()=>setTool('calibrate')}>Manuell kalibrering</button></>:<><b>Inte kalibrerad</b><span>{isPdf?'Välj ritningsskala ovan eller kalibrera manuellt.':'Välj två kända punkter och ange verkligt avstånd.'}</span><button className=\"primary\" onClick={()=>setTool('calibrate')}>Manuell kalibrering</button></>}</div><div><small>SPARADE MÅTT</small>{pageState.measurements.length?pageState.measurements.map(m=><article key={m.id} className=\"measurementItem\"><button className=\"visibility\" onClick={()=>toggleMeasurement(m.id)}>{m.visible?'◉':'○'}</button><span className=\"measurementFields\"><b>{formatMm(measuredMm(m))}</b><input value={m.label||''} onChange={e=>editMeasurement(m.id,{label:e.target.value})} placeholder=\"Namn (valfritt)\"/><textarea rows={2} value={m.description||''} onChange={e=>editMeasurement(m.id,{description:e.target.value})} placeholder=\"Beskrivning (valfri)\"/></span><button className=\"delete\" onClick={()=>removeMeasurement(m.id)}>×</button></article>):<p>Inga mått sparade på den här sidan.</p>}</div></aside>"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          # compact measurement label
+          old="return <g key={m.id} className=\"measurementLine\"><line x1={a.x} y1={a.y} x2={b.x} y2={b.y}/><circle cx={a.x} cy={a.y} r=\"4\"/><circle cx={b.x} cy={b.y} r=\"4\"/><rect x={mx-44} y={my-11} width=\"88\" height=\"22\" rx=\"5\"/><text x={mx} y={my+4} textAnchor=\"middle\">{formatMm(measuredMm(m))}</text></g>"
+          new="const text=formatMm(measuredMm(m));const boxW=Math.max(42,text.length*5.4+10);return <g key={m.id} className=\"measurementLine\"><line x1={a.x} y1={a.y} x2={b.x} y2={b.y}/><circle cx={a.x} cy={a.y} r=\"3\"/><circle cx={b.x} cy={b.y} r=\"3\"/><rect x={mx-boxW/2} y={my-8} width={boxW} height=\"16\" rx=\"4\"/><text x={mx} y={my+3} textAnchor=\"middle\">{text}</text></g>"
+          assert old in s
+          s=s.replace(old,new,1)
+
+          # add magnifier component before readState
+          marker="function readState(projectId:string):DrawingState"
+          component="""function Magnifier({target,point,visible}:{target:HTMLCanvasElement|HTMLImageElement|null;point:Point|null;visible:boolean}){\n const ref=useRef<HTMLCanvasElement|null>(null);\n useEffect(()=>{if(!visible||!point||!target||!ref.current)return;const out=ref.current,ctx=out.getContext('2d');if(!ctx)return;const sourceW=target instanceof HTMLCanvasElement?target.width:target.naturalWidth,sourceH=target instanceof HTMLCanvasElement?target.height:target.naturalHeight;if(!sourceW||!sourceH)return;const sx=point.x*sourceW,sy=point.y*sourceH,span=34;ctx.clearRect(0,0,out.width,out.height);ctx.imageSmoothingEnabled=false;ctx.drawImage(target,sx-span/2,sy-span/2,span,span,0,0,out.width,out.height);ctx.beginPath();ctx.moveTo(out.width/2,0);ctx.lineTo(out.width/2,out.height);ctx.moveTo(0,out.height/2);ctx.lineTo(out.width,out.height/2);ctx.strokeStyle='rgba(194,105,26,.9)';ctx.lineWidth=1;ctx.stroke();},[target,point,visible]);\n if(!visible||!point||!target)return null;const rect=target.getBoundingClientRect();return <div className=\"drawingMagnifier\" style={{left:point.x*rect.width+26,top:point.y*rect.height+30}}><canvas ref={ref} width={118} height={118}/><span/></div>}\n\n"""
+          assert marker in s
+          s=s.replace(marker,component+marker,1)
+          p.write_text(s)
+
+          p=Path('studio/src/project-documents-workspace.css')
+          s=p.read_text()
+          s += "\n.drawingMagnifier{position:absolute;width:118px;height:118px;border:2px solid #d07a22;border-radius:50%;overflow:hidden;pointer-events:none;z-index:20;background:#fff;box-shadow:0 5px 18px rgba(35,42,37,.24)}.drawingMagnifier canvas{width:118px!important;height:118px!important;box-shadow:none!important}.drawingMagnifier span{position:absolute;left:50%;top:50%;width:7px;height:7px;border:1px solid #d07a22;border-radius:50%;transform:translate(-50%,-50%)}.drawingScaleSelect{display:flex;flex-direction:column;gap:4px;font-size:10px;color:#68786e}.drawingScaleSelect select{border:1px solid #cad6ce;border-radius:7px;padding:7px;background:#fff;color:#33443a}.measurementPanel article.measurementItem{align-items:start}.measurementFields{gap:5px}.measurementFields input,.measurementFields textarea{width:100%;box-sizing:border-box;border:1px solid #d7e0da;border-radius:6px;padding:5px 6px;font:inherit;font-size:10px;color:#33443a;background:#fbfcfb;resize:vertical}.measurementFields b{font-size:11px}.measurementLine text{font-size:9px}.measurementLine rect{fill:rgba(255,255,255,.82);stroke-width:.8}.measurementLine line{stroke-width:1.7}\n"
+          p.write_text(s)
+          PY
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/drawing-measurement-ux-patch.yml
+          git add studio/src/ProjectDocumentsWorkspace.tsx studio/src/project-documents-workspace.css
+          git commit -m "Improve drawing measurement precision and scale workflow"
+          git push
