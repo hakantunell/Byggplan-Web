@@ -1,0 +1,28 @@
+name: Restore project hierarchy
+on:
+  push:
+    paths:
+      - 'studio/scripts/restore-project-hierarchy.py'
+      - '.github/workflows/restore-project-hierarchy.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply hierarchy patch
+        run: python3 studio/scripts/restore-project-hierarchy.py
+      - name: Build Studio
+        working-directory: studio
+        run: |
+          npm install
+          npm run build
+      - name: Commit result
+        run: |
+          git config user.name byggplan-bot
+          git config user.email byggplan-bot@users.noreply.github.com
+          git add studio/src/ProjectWorkspace.tsx studio/src/projects-view.css
+          git rm studio/scripts/restore-project-hierarchy.py .github/workflows/restore-project-hierarchy.yml
+          git commit -m "Restore full project hierarchy under projects" || exit 0
+          git push
