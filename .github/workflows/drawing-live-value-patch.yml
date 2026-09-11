@@ -1,0 +1,38 @@
+name: Apply drawing live value patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/drawing-live-value-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Show live length while measuring
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+          old="return <g className=\"measurementPreview\"><line x1={c.x} y1={c.y} x2={b.x} y2={b.y}/><circle cx={b.x} cy={b.y} r=\"4\"/></g>"
+          new="const liveText=tool==='measure'?formatMm(measuredMm({id:'preview',a:pending[0],b:cursorPoint,label:'',visible:true,offset:0})):'';const mx=(c.x+b.x)/2,my=(c.y+b.y)/2,boxW=Math.max(42,liveText.length*5.4+10);return <g className=\"measurementPreview\"><line x1={c.x} y1={c.y} x2={b.x} y2={b.y}/><circle cx={b.x} cy={b.y} r=\"4\"/>{liveText&&<><rect x={mx-boxW/2} y={my-8} width={boxW} height=\"16\" rx=\"4\"/><text x={mx} y={my+3} textAnchor=\"middle\">{liveText}</text></>}</g>"
+          if old not in s:
+              raise SystemExit('measurement preview block not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git rm .github/workflows/drawing-live-value-patch.yml
+          git add studio/src/ProjectDocumentsWorkspace.tsx
+          git commit -m "Show live measurement value while drawing"
+          git push
