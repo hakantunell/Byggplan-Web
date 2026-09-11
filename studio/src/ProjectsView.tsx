@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect,useState } from 'react';
 
+// The project tree mirrors the hierarchy used by ProjectWorkspace without refetching it.
 type Project={id:string;name:string;property_designation?:string;status?:string;workspaceId?:string;workspaceName?:string};
 type ProjectPage='overview'|'activities'|'administration'|'conditions'|'information'|'reports'|'settings';
 type Area={id:string;project_id:string;name:string;sort_order?:number};
