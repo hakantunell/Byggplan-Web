@@ -24,7 +24,7 @@ jobs:
           new="style={{position:'absolute',left:targetRef.current?.offsetLeft||0,top:targetRef.current?.offsetTop||0,overflow:'visible',pointerEvents:'none',zIndex:4}}"
           assert s.count(old)==1, s.count(old)
           s=s.replace(old,new)
-          old='<svg className="drawingOverlay" width={w} height={h} viewBox={`0 0 ${w} ${h}`}}>'
+          old='<svg className="drawingOverlay" width={w} height={h} viewBox={`0 0 ${w} ${h}`}>'
           new='<svg className="drawingOverlay" width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{left:target.offsetLeft,top:target.offsetTop,transform:\'none\'}}>'
           assert s.count(old)==1, s.count(old)
           s=s.replace(old,new)
