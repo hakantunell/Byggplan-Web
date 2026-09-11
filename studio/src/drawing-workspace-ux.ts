@@ -58,20 +58,22 @@ function installPanelControls(ui:DrawingUi){
  const toggleLeft=()=>{leftCollapsed=!leftCollapsed;apply()};
  const toggleRight=()=>{rightCollapsed=!rightCollapsed;apply()};
  const toggleMax=()=>{const maximized=leftCollapsed&&rightCollapsed;leftCollapsed=!maximized;rightCollapsed=!maximized;apply()};
- leftButton?.addEventListener('click',toggleLeft);
- rightButton?.addEventListener('click',toggleRight);
- maxButton?.addEventListener('click',toggleMax);
+ if(leftButton)leftButton.onclick=toggleLeft;
+ if(rightButton)rightButton.onclick=toggleRight;
+ if(maxButton)maxButton.onclick=toggleMax;
 
- if(ui.list&&!q('.drawingPanelCollapseButton[data-side="left"]',ui.list)){
-  const b=document.createElement('button');b.type='button';b.className='drawingPanelCollapseButton';b.dataset.side='left';b.title='Dölj ritningslistan';b.textContent='‹';b.addEventListener('click',toggleLeft);ui.list.prepend(b);
+ if(ui.list){
+  let b=q<HTMLButtonElement>('.drawingPanelCollapseButton[data-side="left"]',ui.list);
+  if(!b){b=document.createElement('button');b.type='button';b.className='drawingPanelCollapseButton';b.dataset.side='left';b.title='Dölj ritningslistan';b.textContent='‹';ui.list.prepend(b)}
+  b.onclick=toggleLeft;
  }
- if(ui.measurements&&!q('.drawingPanelCollapseButton[data-side="right"]',ui.measurements)){
-  const b=document.createElement('button');b.type='button';b.className='drawingPanelCollapseButton';b.dataset.side='right';b.title='Dölj måttpanelen';b.textContent='›';b.addEventListener('click',toggleRight);ui.measurements.prepend(b);
+ if(ui.measurements){
+  let b=q<HTMLButtonElement>('.drawingPanelCollapseButton[data-side="right"]',ui.measurements);
+  if(!b){b=document.createElement('button');b.type='button';b.className='drawingPanelCollapseButton';b.dataset.side='right';b.title='Dölj måttpanelen';b.textContent='›';ui.measurements.prepend(b)}
+  b.onclick=toggleRight;
  }
  apply();
- return()=>{
-  leftButton?.removeEventListener('click',toggleLeft);rightButton?.removeEventListener('click',toggleRight);maxButton?.removeEventListener('click',toggleMax);
- };
+ return()=>{if(leftButton)leftButton.onclick=null;if(rightButton)rightButton.onclick=null;if(maxButton)maxButton.onclick=null};
 }
 
 function installTouchGestures(ui:DrawingUi){
