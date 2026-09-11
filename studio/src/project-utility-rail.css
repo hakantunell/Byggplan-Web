@@ -25,3 +25,5 @@
 @media(max-width:1050px){.projectWorkspace.projectUtilityView{grid-template-columns:84px minmax(0,1fr)}}
 
 .rail .projectSystemRailButton .projectUtilityRailIcon{font-size:19px;line-height:1}
+
+/* Utility navigation is owned by StudioShell; this direct commit also triggers the normal deploy path. */
