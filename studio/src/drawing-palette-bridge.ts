@@ -328,4 +328,5 @@ function scan(){
   const nextKey=PREFIX+encodeURIComponent(drawingIdentity());if(nextKey!==stateKey){loadState();renderPalette();syncMeasurementVisibility();renderOverlay()}
  }
 }
-export function installDrawingPaletteBridge(){const observer=new MutationObserver(()=>scan());observer.observe(document.documentElement,{childList:true,subtree:true});setInterval(scan,700);scan()}
+export function installDrawingPaletteBridge(){
+ window.addEventListener('byggplan:drawing-palette-reload',()=>{if(currentBody){loadState();renderPalette();renderOverlay()}});const observer=new MutationObserver(()=>scan());observer.observe(document.documentElement,{childList:true,subtree:true});setInterval(scan,700);scan()}
