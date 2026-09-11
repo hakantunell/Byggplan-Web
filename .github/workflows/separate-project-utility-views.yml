@@ -1,0 +1,29 @@
+name: Separate project utility views
+on:
+  push:
+    paths:
+      - 'studio/scripts/separate_project_utility_views.py'
+      - '.github/workflows/separate-project-utility-views.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python studio/scripts/separate_project_utility_views.py
+      - name: Build Studio
+        working-directory: studio
+        run: npm ci && npm run build
+      - name: Commit result
+        run: |
+          rm -f studio/scripts/separate_project_utility_views.py
+          rm -f .github/workflows/separate-project-utility-views.yml
+          git config user.name "byggplan-bot"
+          git config user.email "byggplan-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Show project utilities without project tree"
+          git push origin main
