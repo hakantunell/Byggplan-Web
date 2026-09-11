@@ -43,3 +43,5 @@ needle="import './project-workspace-v2.css';\n"
 if needle not in s: raise SystemExit('main css marker not found')
 s=s.replace(needle, needle+"import './projects-view.css';\n",1)
 p.write_text(s)
+
+# trigger
