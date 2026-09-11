@@ -1,0 +1,30 @@
+name: Apply persistent project tree patch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - studio/scripts/apply_persistent_project_tree_patch.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python studio/scripts/apply_persistent_project_tree_patch.py
+      - name: Build Studio
+        working-directory: studio
+        run: npm ci && npm run build
+      - name: Commit result
+        run: |
+          git config user.name byggplan-bot
+          git config user.email byggplan-bot@users.noreply.github.com
+          rm studio/scripts/apply_persistent_project_tree_patch.py
+          rm .github/workflows/apply-persistent-project-tree-patch.yml
+          git add studio/src/StudioShell.tsx studio/src/ProjectWorkspace.tsx studio/src/ProjectsView.tsx studio/src/projects-view.css studio/scripts/apply_persistent_project_tree_patch.py .github/workflows/apply-persistent-project-tree-patch.yml
+          git commit -m "Keep project tree visible while navigating project pages"
+          git push
