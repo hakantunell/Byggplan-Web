@@ -1,0 +1,47 @@
+name: Fix drawing overlay zoom alignment
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-drawing-overlay-zoom.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Align drawing overlays to actual target position
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('studio/src/ProjectDocumentsWorkspace.tsx')
+          s=p.read_text()
+          old="style={{position:'absolute',left:0,top:0,overflow:'visible',pointerEvents:'none',zIndex:3}}"
+          new="style={{position:'absolute',left:targetRef.current?.offsetLeft||0,top:targetRef.current?.offsetTop||0,overflow:'visible',pointerEvents:'none',zIndex:3}}"
+          assert s.count(old)==1, s.count(old)
+          s=s.replace(old,new)
+          old="style={{position:'absolute',left:0,top:0,overflow:'visible',pointerEvents:'none',zIndex:4}}"
+          new="style={{position:'absolute',left:targetRef.current?.offsetLeft||0,top:targetRef.current?.offsetTop||0,overflow:'visible',pointerEvents:'none',zIndex:4}}"
+          assert s.count(old)==1, s.count(old)
+          s=s.replace(old,new)
+          old='<svg className="drawingOverlay" width={w} height={h} viewBox={`0 0 ${w} ${h}`}}>'
+          new='<svg className="drawingOverlay" width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{left:target.offsetLeft,top:target.offsetTop,transform:\'none\'}}>'
+          assert s.count(old)==1, s.count(old)
+          s=s.replace(old,new)
+          old="style={{left:point.x*rect.width+26,top:point.y*rect.height+30}}"
+          new="style={{left:target.offsetLeft+point.x*rect.width+26,top:target.offsetTop+point.y*rect.height+30}}"
+          assert s.count(old)==1, s.count(old)
+          s=s.replace(old,new)
+          p.write_text(s)
+      - name: Build Studio
+        run: |
+          cd studio
+          npm ci
+          npm run build
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add studio/src/ProjectDocumentsWorkspace.tsx
+          git commit -m "Fix drawing overlay alignment when zoomed out"
+          git push
