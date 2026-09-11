@@ -10,11 +10,11 @@ export function ProjectInformationMount(){
   let host:HTMLElement|null=null;
   const sync=()=>{
    const workspace=document.querySelector('.projectWorkspace') as HTMLElement|null;
-   const select=workspace?.querySelector('.topbar select') as HTMLSelectElement|null;
-   const page=workspace?.querySelector('.projectMain .projectPage') as HTMLElement|null;
+   const select=(workspace?.querySelector('.topbar select')||document.querySelector('.controlPlanTopbar select')) as HTMLSelectElement|null;
+   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.projectsLandingMain .projectMain .projectPage')) as HTMLElement|null;
    const isInformation=page?.querySelector('.pageHero small')?.textContent?.trim()==='PROJEKTINFORMATION';
    const nextId=select?.value||'';
-   if(!workspace||!page||!isInformation||!nextId){
+   if(!page||!isInformation||!nextId){
     if(currentCard)currentCard.style.display='';
     host?.remove();currentCard=null;host=null;setTarget(null);setProjectId('');return;
    }

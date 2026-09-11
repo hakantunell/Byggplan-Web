@@ -11,10 +11,10 @@ export function ProjectExecutionResetSettingsMount(){
   let host:HTMLElement|null=null;
   const sync=()=>{
    const workspace=document.querySelector('.projectWorkspace') as HTMLElement|null;
-   const page=workspace?.querySelector('.projectMain .projectPage') as HTMLElement|null;
+   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.projectsLandingMain .projectMain .projectPage')) as HTMLElement|null;
    const isSettings=page?.querySelector('.pageHero small')?.textContent?.trim()==='INSTÄLLNINGAR';
    const danger=page?.querySelector(':scope > .infoCard.dangerZone') as HTMLElement|null;
-   if(!workspace||!page||!isSettings||!danger){host?.remove();host=null;setTarget(null);return}
+   if(!page||!isSettings||!danger){host?.remove();host=null;setTarget(null);return}
    if(!host||!host.isConnected){host=document.createElement('div');host.className='projectExecutionResetHost';danger.appendChild(host);setTarget(host)}
   };
   sync();const timer=window.setInterval(sync,180);

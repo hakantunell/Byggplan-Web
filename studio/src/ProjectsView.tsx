@@ -9,9 +9,6 @@ const PAGES:{id:ProjectPage;label:string;icon:string}[]=[
  {id:'activities',label:'Aktiviteter',icon:'☑'},
  {id:'administration',label:'Administrativa kontrollpunkter',icon:'✓'},
  {id:'conditions',label:'Projektvillkor',icon:'◆'},
- {id:'information',label:'Projektinformation',icon:'ℹ'},
- {id:'reports',label:'Rapporter',icon:'▥'},
- {id:'settings',label:'Inställningar',icon:'⚙'},
 ];
 
 export function ProjectsView({projects,selectedProjectId,selectedPage,onSelectPage,onNewProject,content}:Props){

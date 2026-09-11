@@ -8,9 +8,9 @@ export function SystemBackupSettingsMount(){
   let host:HTMLElement|null=null;
   const sync=()=>{
    const workspace=document.querySelector('.projectWorkspace') as HTMLElement|null;
-   const page=workspace?.querySelector('.projectMain .projectPage') as HTMLElement|null;
+   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.projectsLandingMain .projectMain .projectPage')) as HTMLElement|null;
    const isSettings=page?.querySelector('.pageHero small')?.textContent?.trim()==='INSTÄLLNINGAR';
-   if(!workspace||!page||!isSettings){host?.remove();host=null;setTarget(null);return;}
+   if(!page||!isSettings){host?.remove();host=null;setTarget(null);return;}
    if(!host||!host.isConnected){
     host=document.createElement('section');host.className='infoCard systemBackupSettingsHost';
     const danger=Array.from(page.querySelectorAll(':scope > .infoCard')).find(card=>card.classList.contains('dangerZone')) as HTMLElement|undefined;
