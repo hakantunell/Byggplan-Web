@@ -1,0 +1,27 @@
+name: Remove legacy project mode
+on:
+  push:
+    paths:
+      - 'studio/scripts/remove_legacy_project_mode.py'
+      - '.github/workflows/remove-legacy-project-mode.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python studio/scripts/remove_legacy_project_mode.py
+      - name: Build Studio
+        working-directory: studio
+        run: npm ci && npm run build
+      - name: Commit result
+        run: |
+          git config user.name byggplan-bot
+          git config user.email byggplan-bot@users.noreply.github.com
+          git add studio/src/StudioShell.tsx studio/src/ProjectWorkspace.tsx
+          git commit -m "Use one project navigation state" || exit 0
+          git push
