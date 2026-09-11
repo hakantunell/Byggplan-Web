@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - studio/scripts/apply_drawing_bounds_patch.py
+      - .github/workflows/apply-drawing-bounds-patch.yml
 permissions:
   contents: write
 jobs:
