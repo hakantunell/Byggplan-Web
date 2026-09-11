@@ -27,3 +27,5 @@ new3='function Placeholder({title,text,eyebrow="PROJEKT"}:{title:string;text:str
 if old3 not in s: raise SystemExit('placeholder function marker not found')
 s=s.replace(old3,new3,1)
 p.write_text(s)
+
+# trigger
