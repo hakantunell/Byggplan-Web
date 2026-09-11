@@ -1,0 +1,29 @@
+name: Apply project cache and selection fix
+on:
+  push:
+    branches: [main]
+    paths:
+      - studio/scripts/apply_project_cache_and_selection_fix.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python studio/scripts/apply_project_cache_and_selection_fix.py
+      - name: Build Studio
+        working-directory: studio
+        run: npm ci && npm run build
+      - name: Commit result
+        run: |
+          git config user.name byggplan-bot
+          git config user.email byggplan-bot@users.noreply.github.com
+          rm studio/scripts/apply_project_cache_and_selection_fix.py
+          rm .github/workflows/apply-project-cache-and-selection-fix.yml
+          git add studio/src/ProjectsView.tsx studio/src/ProjectWorkspace.tsx studio/src/ProjectActivitiesView.tsx studio/src/ProjectAdministrationEditor.tsx studio/src/ProjectConditionsView.tsx studio/src/project-data-cache.ts studio/scripts/apply_project_cache_and_selection_fix.py .github/workflows/apply-project-cache-and-selection-fix.yml
+          git commit -m "Cache project views and keep submenu selection clear"
+          git push
