@@ -50,6 +50,7 @@ import './project-detail-tabs.css';
 import './project-activities.css';
 import './activity-move.css';
 import './project-workspace-v2.css';
+import './projects-view.css';
 import './api-browser.css';
 import './governing-import-action.css';
 import './governing-analysis-action.css';
