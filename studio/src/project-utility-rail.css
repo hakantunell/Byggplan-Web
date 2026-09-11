@@ -1,7 +1,27 @@
-.rail .projectUtilityRailButton{order:20}.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px;line-height:1}.projectWorkspace>.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px!important}.rail .projectUtilityRailButton.active{background:#30443a;color:#fff}.projectWorkspace>.rail .projectUtilityRailButton.active{background:#273741;color:#fff}
-.rail .projectUtilityRailButton[data-utility-label="Backup"],.rail>button[title="Backup och återställning"]{order:1000!important;margin-top:auto!important}
+.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px;line-height:1}.projectWorkspace>.rail .projectUtilityRailButton .projectUtilityRailIcon{font-size:20px!important}.rail .projectUtilityRailButton.active{background:#30443a;color:#fff}.projectWorkspace>.rail .projectUtilityRailButton.active{background:#273741;color:#fff}
+
+/* Keep every rail item on exactly the same geometry. Active state, view changes
+   and injected utility buttons must never move the other menu icons. */
+.rail>button{box-sizing:border-box!important;height:47px!important;min-height:47px!important;max-height:47px!important;flex:0 0 47px!important;margin-top:0!important;margin-bottom:0!important;padding:5px 3px!important;gap:3px!important;justify-content:center!important}
+.rail>button>span:last-child{line-height:1.1!important;min-height:11px}
+
+/* One stable menu order in both ProjectWorkspace and the other Studio views. */
+.rail>button[title="Projekt"]{order:10!important}
+.rail>button[title="Projektdokument"]{order:20!important}
+.rail>button[title="Styrdokument"]{order:30!important}
+.rail>button.governingMappingRailButton{order:40!important}
+.rail>button[title="Masterprojekt"]{order:50!important}
+.rail>button[title="Användare"]{order:60!important}
+.rail .projectUtilityRailButton[data-utility-label="Grafisk plan"],.rail>button[title="Grafisk plan"]{order:70!important}
+.rail .projectUtilityRailButton[data-utility-label="Projektinformation"]{order:80!important}
+.rail .projectUtilityRailButton[data-utility-label="Kontrollplan"],.rail>button[title="Kontrollplan"]{order:90!important}
+.rail .projectUtilityRailButton[data-utility-label="Rapporter"]{order:100!important}
+.rail .projectUtilityRailButton[data-utility-label="Backup"],.rail>button[title="Backup och återställning"]{order:110!important}
+.rail .projectUtilityRailButton[data-utility-label="Inställningar"]{order:120!important}
+.rail .projectSystemRailButton,.rail>button[title="Systemadministration · Projektytor"]{order:130!important}
+
 .projectWorkspace.projectUtilityView{grid-template-columns:84px minmax(0,1fr)}.projectWorkspace.projectUtilityView>.projectNav{display:none}.projectWorkspace.projectUtilityView>.projectMain{grid-column:2}.projectWorkspace.projectUtilityView>.topbar{grid-column:1/-1}
 .projectBackupSettingsHost{padding:0!important;overflow:hidden}.projectBackupSettingsHost .projectBackupPage{padding:22px}.projectBackupSettingsHost .projectBackupPage>header small{display:block}.projectBackupSettingsHost .projectBackupPage>header h1{font-size:22px;margin:4px 0 8px}.projectBackupSettingsHost .projectBackupPage>header p{margin:0 0 18px}
 @media(max-width:1050px){.projectWorkspace.projectUtilityView{grid-template-columns:84px minmax(0,1fr)}}
 
-.rail .projectSystemRailButton{order:15}.rail .projectSystemRailButton .projectUtilityRailIcon{font-size:19px;line-height:1}
+.rail .projectSystemRailButton .projectUtilityRailIcon{font-size:19px;line-height:1}
