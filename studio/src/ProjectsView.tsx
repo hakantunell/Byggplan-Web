@@ -29,7 +29,7 @@ export function ProjectsView({projects,selectedProjectId,selectedPage,onSelectPa
     {!projects.length?<div className="projectsTreeEmpty"><span>🌳</span><b>Inga projekt ännu</b><p>Skapa ditt första projekt för att börja bygga upp projektstrukturen.</p></div>:grouped.map((group,groupIndex)=><div className="projectsTreeGroup" key={`${group.name}-${groupIndex}`}>
      {grouped.length>1&&<div className="projectsWorkspaceNode"><span>⌄</span><b>{group.name}</b></div>}
      {group.projects.map(project=>{const open=expanded.has(project.id),active=project.id===selectedProjectId;return <div className="projectsProjectNode" key={project.id}>
-      <div className={`projectsProjectRow ${active?'active':''}`} role="treeitem">
+      <div className="projectsProjectRow" role="treeitem">
        <button className="projectsTreeToggle" aria-label={open?'Fäll ihop projekt':'Expandera projekt'} onClick={()=>toggleProject(project.id)}>{open?'⌄':'›'}</button>
        <button className="projectsProjectSelect" onClick={()=>selectProject(project)}><span className="projectsTreeIcon">🏠</span><span><b>{project.name}</b>{project.property_designation&&<small>{project.property_designation}</small>}</span></button>
       </div>
