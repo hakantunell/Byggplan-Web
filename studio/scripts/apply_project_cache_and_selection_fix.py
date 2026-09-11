@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Apply project selection and cache improvements.
 # ProjectsView: only subpage is active; root project row should not look selected.
 p=Path('studio/src/ProjectsView.tsx')
 s=p.read_text()
