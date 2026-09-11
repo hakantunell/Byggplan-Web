@@ -1,5 +1,5 @@
-type UtilityKind='water'|'sewer'|'electric'|'fiber';
-type SymbolKind='water-service'|'shutoff'|'septic'|'inspection-well'|'meter-cabinet'|'meter-pole'|'fiber-well'|'connection';
+type UtilityKind='water'|'sewer'|'storm'|'combined'|'electric'|'fiber';
+type SymbolKind='water-service'|'shutoff'|'water-connection'|'spill-manhole'|'spill-inspection'|'spill-cleanout'|'storm-manhole'|'storm-inlet'|'drain-well'|'septic'|'inspection-well'|'meter-cabinet'|'meter-pole'|'fiber-well'|'connection';
 type Pt={x:number;y:number};
 type UtilityLine={id:string;kind:UtilityKind;a:Pt;b:Pt};
 type DrawingSymbol={id:string;kind:SymbolKind;point:Pt};
@@ -12,22 +12,38 @@ type DragState=
  |null;
 
 const PREFIX='byggplan.drawingPalette.v1.';
-const DEFAULT_LAYERS={measure:true,water:true,sewer:true,electric:true,fiber:true,symbols:true};
-const LINE_META:Record<UtilityKind,{name:string;icon:string;stroke:string;dash?:string}>={
- water:{name:'Vatten',icon:'💧',stroke:'#1677c8'},
- sewer:{name:'Avlopp',icon:'↘',stroke:'#8a5a2b'},
- electric:{name:'El',icon:'⚡',stroke:'#d19a00'},
- fiber:{name:'Fiber',icon:'⌁',stroke:'#8b45b8',dash:'7 4'},
+const DEFAULT_LAYERS={measure:true,water:true,sewer:true,storm:true,combined:true,electric:true,fiber:true,symbols:true};
+/*
+ * VA presentation follows Svenskt Vatten P109 conventions where applicable:
+ * V=dricksvatten/blå, S=spillvatten/röd, D=dagvatten/grön, K=kombinerat/brun.
+ * Dash patterns here are screen-friendly ByggPlan variants chosen to retain B/W distinction;
+ * they are not claimed to reproduce the P109 CAD .lin file byte-for-byte.
+ * El and fiber remain ByggPlan conventions and are deliberately identified as such in the UI.
+ */
+const LINE_META:Record<UtilityKind,{name:string;icon:string;stroke:string;dash?:string;standard:'P109'|'ByggPlan'}>={
+ water:{name:'Dricksvatten (V)',icon:'V',stroke:'#0066b3',standard:'P109'},
+ sewer:{name:'Spillvatten (S)',icon:'S',stroke:'#d22630',dash:'12 4',standard:'P109'},
+ storm:{name:'Dagvatten (D)',icon:'D',stroke:'#198754',dash:'3 4',standard:'P109'},
+ combined:{name:'Kombinerat avlopp (K)',icon:'K',stroke:'#795548',dash:'10 3 2 3 2 3',standard:'P109'},
+ electric:{name:'El',icon:'⚡',stroke:'#d19a00',standard:'ByggPlan'},
+ fiber:{name:'Fiber',icon:'⌁',stroke:'#8b45b8',dash:'7 4',standard:'ByggPlan'},
 };
-const SYMBOL_META:Record<SymbolKind,{name:string;icon:string;glyph:string}>={
- 'water-service':{name:'Vattenservis',icon:'◉',glyph:'VS'},
- shutoff:{name:'Avstängningsventil',icon:'⊗',glyph:'AV'},
- septic:{name:'Trekammarbrunn',icon:'▣',glyph:'3K'},
- 'inspection-well':{name:'Brunn',icon:'○',glyph:'B'},
- 'meter-cabinet':{name:'El-/mätarskåp',icon:'▤',glyph:'EL'},
- 'meter-pole':{name:'Mätstolpe',icon:'⚑',glyph:'MS'},
- 'fiber-well':{name:'Fiberbrunn',icon:'◎',glyph:'FB'},
- connection:{name:'Anslutningspunkt',icon:'◆',glyph:'A'},
+const SYMBOL_META:Record<SymbolKind,{name:string;icon:string;glyph:string;standard:'P109'|'ByggPlan'}>={
+ 'water-service':{name:'Servisventil vatten (VSV)',icon:'◉',glyph:'VSV',standard:'P109'},
+ shutoff:{name:'Avstängningsventil vatten (VAV)',icon:'⊗',glyph:'VAV',standard:'P109'},
+ 'water-connection':{name:'Förbindelsepunkt vatten (VFP)',icon:'◆',glyph:'VFP',standard:'P109'},
+ 'spill-manhole':{name:'Nedstigningsbrunn spillvatten (SNB)',icon:'○',glyph:'SNB',standard:'P109'},
+ 'spill-inspection':{name:'Tillsynsbrunn spillvatten (STB)',icon:'○',glyph:'STB',standard:'P109'},
+ 'spill-cleanout':{name:'Rensbrunn spillvatten (SRB)',icon:'○',glyph:'SRB',standard:'P109'},
+ 'storm-manhole':{name:'Nedstigningsbrunn dagvatten (DNB)',icon:'○',glyph:'DNB',standard:'P109'},
+ 'storm-inlet':{name:'Dagvattenbrunn (DB)',icon:'⊙',glyph:'DB',standard:'P109'},
+ 'drain-well':{name:'Dränbrunn (DR)',icon:'◌',glyph:'DR',standard:'P109'},
+ septic:{name:'Trekammarbrunn',icon:'▣',glyph:'3K',standard:'ByggPlan'},
+ 'inspection-well':{name:'Brunn, generell',icon:'○',glyph:'B',standard:'ByggPlan'},
+ 'meter-cabinet':{name:'El-/mätarskåp',icon:'▤',glyph:'EL',standard:'ByggPlan'},
+ 'meter-pole':{name:'Mätstolpe',icon:'⚑',glyph:'MS',standard:'ByggPlan'},
+ 'fiber-well':{name:'Fiberbrunn',icon:'◎',glyph:'FB',standard:'ByggPlan'},
+ connection:{name:'Anslutningspunkt, generell',icon:'◆',glyph:'A',standard:'ByggPlan'},
 };
 
 let mode:Mode={type:'none'};
@@ -45,7 +61,7 @@ let stateKey='';
 
 function q<T extends Element>(selector:string,root:ParentNode=document){return root.querySelector(selector) as T|null}
 function qa<T extends Element>(selector:string,root:ParentNode=document){return Array.from(root.querySelectorAll(selector)) as T[]}
-function esc(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c))}
+function esc(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]||c))}
 function uid(){return crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`}
 function clamp01(v:number){return Math.max(0,Math.min(1,v))}
 function drawingIdentity(){
@@ -77,16 +93,16 @@ function deleteSelection(){
 }
 function selectedDescription(){
  if(!selection)return '';
- if(selection.type==='symbol'){const s=state.symbols.find(x=>x.id===selection!.id);return s?SYMBOL_META[s.kind].name:''}
- const l=state.lines.find(x=>x.id===selection!.id);return l?`${LINE_META[l.kind].name}-ledning`:'';
+ if(selection.type==='symbol'){const s=state.symbols.find(x=>x.id===selection!.id);return s?SYMBOL_META[s.kind]?.name||s.kind:''}
+ const l=state.lines.find(x=>x.id===selection!.id);return l?`${LINE_META[l.kind]?.name||l.kind}-ledning`:'';
 }
 function renderPalette(){
  const host=q<HTMLElement>('.drawingPalettePanel',currentBody||document);if(!host)return;
  const tabs=qa<HTMLButtonElement>('.drawingPaletteTabs button',currentBody||document);tabs.forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));
  if(activeTab==='tools')host.innerHTML=`<small>VERKTYG</small><button data-select class="${mode.type==='select'?'active':''}">↖ Markera / flytta</button><button data-legacy="Mät">📏 Längdmått</button><button data-legacy="Vinkel">∠ Vinkel</button>${selection?`<div class="drawingSelectionPanel"><small>MARKERAT</small><b>${esc(selectedDescription())}</b><span>${selection.type==='line'?'Dra linjen för att flytta hela ledningen eller dra något av ändpunktshandtagen.':'Dra symbolen till önskad plats.'}</span><button data-delete-selection>🗑 Ta bort markerat</button></div>`:''}<p>Delete/Backspace tar också bort markerat objekt. Kalibrering ligger kvar i verktygsraden ovanför ritningen.</p>`;
- else if(activeTab==='lines')host.innerHTML=`<small>RITA LEDNING</small>${(Object.entries(LINE_META) as [UtilityKind,typeof LINE_META[UtilityKind]][]).map(([k,m])=>`<button data-line="${k}" class="${mode.type==='line'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${m.name}</button>`).join('')}<p>Klicka start- och slutpunkt. Håll Shift för 45°-snäppning.</p>`;
- else if(activeTab==='symbols')host.innerHTML=`<small>PLACERA SYMBOL</small>${(Object.entries(SYMBOL_META) as [SymbolKind,typeof SYMBOL_META[SymbolKind]][]).map(([k,m])=>`<button data-symbol="${k}" class="${mode.type==='symbol'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${esc(m.name)}</button>`).join('')}<p>Välj symbol och klicka på ritningen. Du kan placera flera av samma symbol efter varandra.</p>`;
- else host.innerHTML=`<small>LAGER</small>${[['measure','Mått'],['water','Vatten'],['sewer','Avlopp'],['electric','El'],['fiber','Fiber'],['symbols','Symboler']].map(([k,n])=>`<label><input type="checkbox" data-layer="${k}" ${state.layers[k]!==false?'checked':''}><span>${n}</span></label>`).join('')}<p>Lager påverkar bara visningen, inte sparade objekt.</p>`;
+ else if(activeTab==='lines')host.innerHTML=`<small>RITA LEDNING</small>${(Object.entries(LINE_META) as [UtilityKind,typeof LINE_META[UtilityKind]][]).map(([k,m])=>`<button data-line="${k}" class="${mode.type==='line'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${m.name}${m.standard==='P109'?'<em>P109</em>':'<em>egen</em>'}</button>`).join('')}<p class="drawingStandardNote"><b>VA:</b> färg och flödeskoder följer Svenskt Vatten P109. Linjemönstren är skärmanpassade ByggPlan-varianter med samma princip om svartvit läsbarhet. El och fiber är egna ByggPlan-konventioner.</p><p>Klicka start- och slutpunkt. Håll Shift för 45°-snäppning.</p>`;
+ else if(activeTab==='symbols')host.innerHTML=`<small>PLACERA SYMBOL</small>${(Object.entries(SYMBOL_META) as [SymbolKind,typeof SYMBOL_META[SymbolKind]][]).map(([k,m])=>`<button data-symbol="${k}" class="${mode.type==='symbol'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${esc(m.name)}${m.standard==='P109'?'<em>P109-kod</em>':'<em>egen</em>'}</button>`).join('')}<p class="drawingStandardNote">VA-objekt använder P109-benämningar/koder där de finns. Trekammarbrunn, el, fiber och generella projektobjekt är uttryckligen egna ByggPlan-symboler.</p><p>Välj symbol och klicka på ritningen. Du kan placera flera av samma symbol efter varandra.</p>`;
+ else host.innerHTML=`<small>LAGER</small>${[['measure','Mått'],['water','Dricksvatten (V)'],['sewer','Spillvatten (S)'],['storm','Dagvatten (D)'],['combined','Kombinerat (K)'],['electric','El'],['fiber','Fiber'],['symbols','Symboler']].map(([k,n])=>`<label><input type="checkbox" data-layer="${k}" ${state.layers[k]!==false?'checked':''}><span>${n}</span></label>`).join('')}<p>Lager påverkar bara visningen, inte sparade objekt.</p>`;
  q<HTMLButtonElement>('[data-select]',host)?.addEventListener('click',setSelectMode);
  q<HTMLButtonElement>('[data-delete-selection]',host)?.addEventListener('click',deleteSelection);
  qa<HTMLButtonElement>('[data-legacy]',host).forEach(b=>b.onclick=()=>activateLegacy(b.dataset.legacy||'Hand'));
@@ -103,14 +119,15 @@ function renderOverlay(){
  if(!overlay)return;const t=targetElement();if(!t)return;const r=t.getBoundingClientRect(),w=r.width,h=r.height;overlay.setAttribute('width',String(w));overlay.setAttribute('height',String(h));overlay.style.left=`${(t as HTMLElement).offsetLeft}px`;overlay.style.top=`${(t as HTMLElement).offsetTop}px`;
  const parts:string[]=[];
  for(const l of state.lines){
-  if(state.layers[l.kind]===false)continue;const m=LINE_META[l.kind],a={x:l.a.x*w,y:l.a.y*h},b={x:l.b.x*w,y:l.b.y*h},selected=selection?.type==='line'&&selection.id===l.id;
+  const m=LINE_META[l.kind];if(!m||state.layers[l.kind]===false)continue;const a={x:l.a.x*w,y:l.a.y*h},b={x:l.b.x*w,y:l.b.y*h},selected=selection?.type==='line'&&selection.id===l.id;
   if(selected)parts.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#173f2c" stroke-width="8" opacity=".22"/>`);
   parts.push(`<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${m.stroke}" stroke-width="${selected?4:3}" ${m.dash?`stroke-dasharray="${m.dash}"`:''}/><circle cx="${a.x}" cy="${a.y}" r="${selected?7:3}" fill="#fff" stroke="${selected?'#173f2c':m.stroke}" stroke-width="${selected?2.5:2}"/><circle cx="${b.x}" cy="${b.y}" r="${selected?7:3}" fill="#fff" stroke="${selected?'#173f2c':m.stroke}" stroke-width="${selected?2.5:2}"/>`);
  }
  if(state.layers.symbols!==false)for(const s of state.symbols){
-  const m=SYMBOL_META[s.kind],x=s.point.x*w,y=s.point.y*h,selected=selection?.type==='symbol'&&selection.id===s.id;
-  if(selected)parts.push(`<circle cx="${x}" cy="${y}" r="17" fill="none" stroke="#173f2c" stroke-width="3" stroke-dasharray="4 3"/>`);
-  parts.push(`<g><circle cx="${x}" cy="${y}" r="12" fill="white" stroke="${selected?'#173f2c':'#244b37'}" stroke-width="${selected?3:2}"/><text x="${x}" y="${y+3}" text-anchor="middle" font-size="8" font-weight="900" fill="#244b37">${m.glyph}</text></g>`)
+  const m=SYMBOL_META[s.kind];if(!m)continue;const x=s.point.x*w,y=s.point.y*h,selected=selection?.type==='symbol'&&selection.id===s.id;
+  if(selected)parts.push(`<circle cx="${x}" cy="${y}" r="19" fill="none" stroke="#173f2c" stroke-width="3" stroke-dasharray="4 3"/>`);
+  const radius=m.glyph.length>2?15:12,fs=m.glyph.length>2?6.6:8;
+  parts.push(`<g><circle cx="${x}" cy="${y}" r="${radius}" fill="white" stroke="${selected?'#173f2c':'#244b37'}" stroke-width="${selected?3:2}"/><text x="${x}" y="${y+2.8}" text-anchor="middle" font-size="${fs}" font-weight="900" fill="#244b37">${m.glyph}</text></g>`)
  }
  if(mode.type==='line'&&firstPoint&&hoverPoint){const m=LINE_META[mode.kind],a={x:firstPoint.x*w,y:firstPoint.y*h},b={x:hoverPoint.x*w,y:hoverPoint.y*h};parts.push(`<line class="drawingUtilityPreview" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${m.stroke}" stroke-width="3" ${m.dash?`stroke-dasharray="${m.dash}"`:''}/><circle cx="${a.x}" cy="${a.y}" r="4" fill="#fff" stroke="${m.stroke}" stroke-width="2"/>`)}
  overlay.innerHTML=parts.join('');
@@ -118,9 +135,9 @@ function renderOverlay(){
 function distanceToSegment(px:number,py:number,ax:number,ay:number,bx:number,by:number){const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;if(!len2)return Math.hypot(px-ax,py-ay);const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/len2));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy))}
 function hitTest(p:Pt):{selection:NonNullable<Selection>;part?:'a'|'b'|'whole'}|null{
  const t=targetElement();if(!t)return null;const r=t.getBoundingClientRect(),px=p.x*r.width,py=p.y*r.height;
- for(let i=state.lines.length-1;i>=0;i--){const l=state.lines[i];if(state.layers[l.kind]===false)continue;const ax=l.a.x*r.width,ay=l.a.y*r.height,bx=l.b.x*r.width,by=l.b.y*r.height;if(Math.hypot(px-ax,py-ay)<=11)return{selection:{type:'line',id:l.id},part:'a'};if(Math.hypot(px-bx,py-by)<=11)return{selection:{type:'line',id:l.id},part:'b'}}
- if(state.layers.symbols!==false)for(let i=state.symbols.length-1;i>=0;i--){const s=state.symbols[i],sx=s.point.x*r.width,sy=s.point.y*r.height;if(Math.hypot(px-sx,py-sy)<=17)return{selection:{type:'symbol',id:s.id}}}
- for(let i=state.lines.length-1;i>=0;i--){const l=state.lines[i];if(state.layers[l.kind]===false)continue;const ax=l.a.x*r.width,ay=l.a.y*r.height,bx=l.b.x*r.width,by=l.b.y*r.height;if(distanceToSegment(px,py,ax,ay,bx,by)<=9)return{selection:{type:'line',id:l.id},part:'whole'}}
+ for(let i=state.lines.length-1;i>=0;i--){const l=state.lines[i];if(!LINE_META[l.kind]||state.layers[l.kind]===false)continue;const ax=l.a.x*r.width,ay=l.a.y*r.height,bx=l.b.x*r.width,by=l.b.y*r.height;if(Math.hypot(px-ax,py-ay)<=11)return{selection:{type:'line',id:l.id},part:'a'};if(Math.hypot(px-bx,py-by)<=11)return{selection:{type:'line',id:l.id},part:'b'}}
+ if(state.layers.symbols!==false)for(let i=state.symbols.length-1;i>=0;i--){const s=state.symbols[i],sx=s.point.x*r.width,sy=s.point.y*r.height;if(Math.hypot(px-sx,py-sy)<=19)return{selection:{type:'symbol',id:s.id}}}
+ for(let i=state.lines.length-1;i>=0;i--){const l=state.lines[i];if(!LINE_META[l.kind]||state.layers[l.kind]===false)continue;const ax=l.a.x*r.width,ay=l.a.y*r.height,bx=l.b.x*r.width,by=l.b.y*r.height;if(distanceToSegment(px,py,ax,ay,bx,by)<=9)return{selection:{type:'line',id:l.id},part:'whole'}}
  return null;
 }
 function beginSelectionDrag(p:Pt,hit:{selection:NonNullable<Selection>;part?:'a'|'b'|'whole'}){
