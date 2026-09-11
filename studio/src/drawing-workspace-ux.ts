@@ -81,19 +81,40 @@ function installTouchGestures(ui:DrawingUi){
  const pointers=new Map<number,TouchPoint>();
  let pan:null|{id:number;x:number;y:number;scrollLeft:number;scrollTop:number}=null;
  let pinchDistance=0;
+ let lastZoomAt=0;
+ let pendingZoom:1|-1|0=0;
+ let zoomTimer:number|null=null;
+ const ZOOM_INTERVAL_MS=650;
+ const PINCH_THRESHOLD=1.07;
  const isSelectMode=()=>Boolean(q('.drawingPalettePanel [data-select].active',ui.body));
  const distance=()=>{const a=[...pointers.values()];return a.length<2?0:Math.hypot(a[1].x-a[0].x,a[1].y-a[0].y)};
  const resetPanToRemaining=()=>{const first=[...pointers.entries()][0];if(!first){pan=null;return}pan={id:first[0],x:first[1].x,y:first[1].y,scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop}};
  const zoomStep=(direction:1|-1)=>{
   const ev=new WheelEvent('wheel',{deltaY:direction>0?-100:100,ctrlKey:true,bubbles:true,cancelable:true});
   viewport.dispatchEvent(ev);
+  lastZoomAt=performance.now();
+ };
+ const flushPendingZoom=()=>{
+  zoomTimer=null;
+  if(!pendingZoom)return;
+  const direction=pendingZoom;pendingZoom=0;zoomStep(direction);
+ };
+ const requestZoom=(direction:1|-1)=>{
+  pendingZoom=direction;
+  const elapsed=performance.now()-lastZoomAt;
+  if(elapsed>=ZOOM_INTERVAL_MS){
+   if(zoomTimer!=null){window.clearTimeout(zoomTimer);zoomTimer=null}
+   flushPendingZoom();
+   return;
+  }
+  if(zoomTimer==null)zoomTimer=window.setTimeout(flushPendingZoom,Math.max(0,ZOOM_INTERVAL_MS-elapsed));
  };
  const down=(e:PointerEvent)=>{
   if(e.pointerType!=='touch'||!isSelectMode()||e.defaultPrevented)return;
   pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   try{stage.setPointerCapture(e.pointerId)}catch{}
   if(pointers.size===1)pan={id:e.pointerId,x:e.clientX,y:e.clientY,scrollLeft:viewport.scrollLeft,scrollTop:viewport.scrollTop};
-  else if(pointers.size===2){pan=null;pinchDistance=distance();}
+  else if(pointers.size===2){pan=null;pinchDistance=distance();pendingZoom=0;}
   e.preventDefault();
  };
  const move=(e:PointerEvent)=>{
@@ -103,15 +124,17 @@ function installTouchGestures(ui:DrawingUi){
   if(pointers.size>=2){
    const d=distance();if(!pinchDistance){pinchDistance=d;return}
    const ratio=d/pinchDistance;
-   if(ratio>=1.035){zoomStep(1);pinchDistance=d}
-   else if(ratio<=.966){zoomStep(-1);pinchDistance=d}
+   if(ratio>=PINCH_THRESHOLD){requestZoom(1);pinchDistance=d}
+   else if(ratio<=1/PINCH_THRESHOLD){requestZoom(-1);pinchDistance=d}
    return;
   }
   if(pan&&pan.id===e.pointerId){viewport.scrollLeft=pan.scrollLeft-(e.clientX-pan.x);viewport.scrollTop=pan.scrollTop-(e.clientY-pan.y)}
  };
  const up=(e:PointerEvent)=>{
   if(e.pointerType!=='touch'||!pointers.has(e.pointerId))return;
-  pointers.delete(e.pointerId);pinchDistance=pointers.size>=2?distance():0;
+  pointers.delete(e.pointerId);
+  if(pointers.size<2&&pendingZoom&&performance.now()-lastZoomAt>=ZOOM_INTERVAL_MS)flushPendingZoom();
+  pinchDistance=pointers.size>=2?distance():0;
   if(pointers.size===1)resetPanToRemaining();else if(!pointers.size)pan=null;
   try{stage.releasePointerCapture(e.pointerId)}catch{}
  };
@@ -119,7 +142,10 @@ function installTouchGestures(ui:DrawingUi){
  stage.addEventListener('pointermove',move,false);
  stage.addEventListener('pointerup',up,false);
  stage.addEventListener('pointercancel',up,false);
- return()=>{stage.removeEventListener('pointerdown',down,false);stage.removeEventListener('pointermove',move,false);stage.removeEventListener('pointerup',up,false);stage.removeEventListener('pointercancel',up,false)};
+ return()=>{
+  if(zoomTimer!=null)window.clearTimeout(zoomTimer);
+  stage.removeEventListener('pointerdown',down,false);stage.removeEventListener('pointermove',move,false);stage.removeEventListener('pointerup',up,false);stage.removeEventListener('pointercancel',up,false)
+ };
 }
 
 function install(workspace:HTMLElement){
