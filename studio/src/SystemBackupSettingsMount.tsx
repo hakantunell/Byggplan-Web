@@ -8,7 +8,7 @@ export function SystemBackupSettingsMount(){
   let host:HTMLElement|null=null;
   const sync=()=>{
    const workspace=document.querySelector('.projectWorkspace') as HTMLElement|null;
-   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.projectsLandingMain .projectMain .projectPage')) as HTMLElement|null;
+   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.controlPlanMainRegion .embeddedProjectMain .projectPage')) as HTMLElement|null;
    const isSettings=page?.querySelector('.pageHero small')?.textContent?.trim()==='INSTÄLLNINGAR';
    if(!page||!isSettings){host?.remove();host=null;setTarget(null);return;}
    if(!host||!host.isConnected){

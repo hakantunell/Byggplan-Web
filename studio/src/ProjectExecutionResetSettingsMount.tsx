@@ -11,7 +11,7 @@ export function ProjectExecutionResetSettingsMount(){
   let host:HTMLElement|null=null;
   const sync=()=>{
    const workspace=document.querySelector('.projectWorkspace') as HTMLElement|null;
-   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.projectsLandingMain .projectMain .projectPage')) as HTMLElement|null;
+   const page=(workspace?.querySelector('.projectMain .projectPage')||document.querySelector('.controlPlanMainRegion .embeddedProjectMain .projectPage')) as HTMLElement|null;
    const isSettings=page?.querySelector('.pageHero small')?.textContent?.trim()==='INSTÄLLNINGAR';
    const danger=page?.querySelector(':scope > .infoCard.dangerZone') as HTMLElement|null;
    if(!page||!isSettings||!danger){host?.remove();host=null;setTarget(null);return}
