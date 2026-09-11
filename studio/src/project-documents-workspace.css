@@ -9,3 +9,7 @@
 .drawingMagnifier::before{left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px)}
 .drawingMagnifier::after{top:50%;left:0;right:0;height:1px;transform:translateY(-.5px)}
 .drawingMagnifier>span{z-index:22}
+
+/* Live length label while the second measurement point is being positioned. */
+.measurementPreview rect{fill:rgba(255,255,255,.97);stroke:#d07a22;stroke-width:1}
+.measurementPreview text{fill:#4f3216;font-size:11px;font-weight:900;paint-order:stroke;stroke:#fff;stroke-width:.5px}
