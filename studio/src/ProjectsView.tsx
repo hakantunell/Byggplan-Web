@@ -33,7 +33,7 @@ export function ProjectsView({projects,selectedProjectId,selectedPage,onSelectPa
        <button className="projectsTreeToggle" aria-label={open?'Fäll ihop projekt':'Expandera projekt'} onClick={()=>toggleProject(project.id)}>{open?'⌄':'›'}</button>
        <button className="projectsProjectSelect" onClick={()=>selectProject(project)}><span className="projectsTreeIcon">🏠</span><span><b>{project.name}</b>{project.property_designation&&<small>{project.property_designation}</small>}</span></button>
       </div>
-      {open&&<div className="projectsProjectChildren">{PAGES.map(page=><button key={page.id} className={active&&selectedPage===page.id?'active':''} onClick={()=>onSelectPage(project.id,page.id)}><span>{page.icon}</span><span>{page.label}</span></button>)}</div>}
+      {open&&<div className="projectsProjectChildren">{PAGES.map(page=>{const selected=active&&selectedPage===page.id;return <button key={page.id} className={selected?'selectedProjectPage':''} aria-current={selected?'page':undefined} data-project-page={page.id} onClick={()=>onSelectPage(project.id,page.id)}><span>{page.icon}</span><span>{page.label}</span></button>})}</div>}
      </div>})}
     </div>)}
    </div>
