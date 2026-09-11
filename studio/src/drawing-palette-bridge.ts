@@ -10,7 +10,7 @@ const PREFIX='byggplan.drawingPalette.v1.';
 const DEFAULT_LAYERS={measure:true,water:true,sewer:true,electric:true,fiber:true,symbols:true};
 const LINE_META:Record<UtilityKind,{name:string;icon:string;stroke:string;dash?:string}>={
  water:{name:'Vatten',icon:'💧',stroke:'#1677c8'},
- sewer:{name:'Spillvatten',icon:'↘',stroke:'#8a5a2b'},
+ sewer:{name:'Avlopp',icon:'↘',stroke:'#8a5a2b'},
  electric:{name:'El',icon:'⚡',stroke:'#d19a00'},
  fiber:{name:'Fiber',icon:'⌁',stroke:'#8b45b8',dash:'7 4'},
 };
@@ -57,16 +57,16 @@ function pointFromEvent(e:PointerEvent):Pt|null{const t=targetElement();if(!t)re
 function snap(origin:Pt,p:Pt,shift:boolean){if(!shift)return p;const t=targetElement();if(!t)return p;const r=t.getBoundingClientRect(),dx=(p.x-origin.x)*r.width,dy=(p.y-origin.y)*r.height,len=Math.hypot(dx,dy);if(!len)return p;const a=Math.round(Math.atan2(dy,dx)/(Math.PI/4))*(Math.PI/4);return{x:origin.x+Math.cos(a)*len/r.width,y:origin.y+Math.sin(a)*len/r.height}}
 function clickLegacy(text:string){const b=qa<HTMLButtonElement>('.drawingToolbar button').find(x=>x.textContent?.includes(text));b?.click()}
 function clearMode(){mode={type:'none'};firstPoint=null;hoverPoint=null;renderPalette();renderOverlay()}
-function setLineMode(kind:UtilityKind){clickLegacy('Hand');mode={type:'line',kind};firstPoint=null;hoverPoint=null;activeTab='lines';renderPalette();renderOverlay()}
-function setSymbolMode(kind:SymbolKind){clickLegacy('Hand');mode={type:'symbol',kind};firstPoint=null;hoverPoint=null;activeTab='symbols';renderPalette();renderOverlay()}
+function setLineMode(kind:UtilityKind){mode={type:'line',kind};firstPoint=null;hoverPoint=null;activeTab='lines';renderPalette();renderOverlay()}
+function setSymbolMode(kind:SymbolKind){mode={type:'symbol',kind};firstPoint=null;hoverPoint=null;activeTab='symbols';renderPalette();renderOverlay()}
 function activateLegacy(label:string){clearMode();clickLegacy(label)}
 function renderPalette(){
  const host=q<HTMLElement>('.drawingPalettePanel',currentBody||document);if(!host)return;
  const tabs=qa<HTMLButtonElement>('.drawingPaletteTabs button',currentBody||document);tabs.forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));
- if(activeTab==='tools')host.innerHTML=`<small>VERKTYG</small><button data-legacy="Hand">✋ Hand / markera</button><button data-legacy="Kalibrera">↔ Kalibrera</button><button data-legacy="Mät">📏 Längdmått</button><button data-legacy="Vinkel">∠ Vinkel</button><p>Mätverktygen använder samma kalibrering och måttdata som tidigare.</p>`;
+ if(activeTab==='tools')host.innerHTML=`<small>VERKTYG</small><button data-legacy="Hand">✋ Hand / markera</button><button data-legacy="Mät">📏 Längdmått</button><button data-legacy="Vinkel">∠ Vinkel</button><p>Kalibrering ligger kvar i verktygsraden ovanför ritningen.</p>`;
  else if(activeTab==='lines')host.innerHTML=`<small>RITA LEDNING</small>${(Object.entries(LINE_META) as [UtilityKind,typeof LINE_META[UtilityKind]][]).map(([k,m])=>`<button data-line="${k}" class="${mode.type==='line'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${m.name}</button>`).join('')}<p>Klicka start- och slutpunkt. Håll Shift för 45°-snäppning.</p>`;
- else if(activeTab==='symbols')host.innerHTML=`<small>PLACERA SYMBOL</small>${(Object.entries(SYMBOL_META) as [SymbolKind,typeof SYMBOL_META[SymbolKind]][]).map(([k,m])=>`<button data-symbol="${k}" class="${mode.type==='symbol'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${esc(m.name)}</button>`).join('')}<p>Välj symbol och klicka på ritningen. Symbolen skalas inte med ritningszoom.</p>`;
- else host.innerHTML=`<small>LAGER</small>${[['measure','Mått'],['water','Vatten'],['sewer','Spillvatten'],['electric','El'],['fiber','Fiber'],['symbols','Symboler']].map(([k,n])=>`<label><input type="checkbox" data-layer="${k}" ${state.layers[k]!==false?'checked':''}><span>${n}</span></label>`).join('')}<p>Lager påverkar bara visningen, inte sparade objekt.</p>`;
+ else if(activeTab==='symbols')host.innerHTML=`<small>PLACERA SYMBOL</small>${(Object.entries(SYMBOL_META) as [SymbolKind,typeof SYMBOL_META[SymbolKind]][]).map(([k,m])=>`<button data-symbol="${k}" class="${mode.type==='symbol'&&mode.kind===k?'active':''}"><span>${m.icon}</span>${esc(m.name)}</button>`).join('')}<p>Välj symbol och klicka på ritningen. Du kan placera flera av samma symbol efter varandra.</p>`;
+ else host.innerHTML=`<small>LAGER</small>${[['measure','Mått'],['water','Vatten'],['sewer','Avlopp'],['electric','El'],['fiber','Fiber'],['symbols','Symboler']].map(([k,n])=>`<label><input type="checkbox" data-layer="${k}" ${state.layers[k]!==false?'checked':''}><span>${n}</span></label>`).join('')}<p>Lager påverkar bara visningen, inte sparade objekt.</p>`;
  qa<HTMLButtonElement>('[data-legacy]',host).forEach(b=>b.onclick=()=>activateLegacy(b.dataset.legacy||'Hand'));
  qa<HTMLButtonElement>('[data-line]',host).forEach(b=>b.onclick=()=>setLineMode(b.dataset.line as UtilityKind));
  qa<HTMLButtonElement>('[data-symbol]',host).forEach(b=>b.onclick=()=>setSymbolMode(b.dataset.symbol as SymbolKind));
@@ -98,7 +98,7 @@ function installInto(body:HTMLElement){
  const palette=document.createElement('aside');palette.className='drawingPalette';palette.innerHTML=`<div class="drawingPaletteTabs"><button data-tab="tools">⌖<span>Verktyg</span></button><button data-tab="lines">╱<span>Ledningar</span></button><button data-tab="symbols">◇<span>Symboler</span></button><button data-tab="layers">▱<span>Lager</span></button></div><div class="drawingPalettePanel"></div>`;
  const viewport=q<HTMLElement>('.drawingStageViewport',body);if(viewport)body.insertBefore(palette,viewport);else body.prepend(palette);
  qa<HTMLButtonElement>('.drawingPaletteTabs button',palette).forEach(b=>b.onclick=()=>{activeTab=b.dataset.tab||'tools';renderPalette()});
- for(const b of qa<HTMLButtonElement>('.drawingToolbar button')){const txt=b.textContent||'';if(/Hand|Kalibrera|Mät|Vinkel/.test(txt))b.classList.add('drawingPaletteLegacyTool')}
+ for(const b of qa<HTMLButtonElement>('.drawingToolbar button')){const txt=b.textContent||'';if(/Hand|Mät|Vinkel/.test(txt)&&!txt.includes('Kalibrera'))b.classList.add('drawingPaletteLegacyTool')}
  currentStage.addEventListener('pointerdown',onPointerDown,true);currentStage.addEventListener('pointermove',onPointerMove,true);window.addEventListener('keydown',onKey);
  ensureOverlay();renderPalette();syncMeasurementVisibility();renderOverlay();
 }
