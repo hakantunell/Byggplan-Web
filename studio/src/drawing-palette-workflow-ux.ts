@@ -1,5 +1,19 @@
 const SYMBOL_GLYPHS:Record<string,string>={
- 'water-service':'VS',shutoff:'AV',septic:'3K','inspection-well':'B','meter-cabinet':'EL','meter-pole':'MS','fiber-well':'FB',connection:'A'
+ 'water-service':'VSV',
+ shutoff:'VAV',
+ 'water-connection':'VFP',
+ 'spill-manhole':'SNB',
+ 'spill-inspection':'STB',
+ 'spill-cleanout':'SRB',
+ 'storm-manhole':'DNB',
+ 'storm-inlet':'DB',
+ 'drain-well':'DR',
+ septic:'3K',
+ 'inspection-well':'B',
+ 'meter-cabinet':'EL',
+ 'meter-pole':'MS',
+ 'fiber-well':'FB',
+ connection:'A'
 };
 
 let preview:HTMLDivElement|null=null;
@@ -32,6 +46,7 @@ function onPointerMove(e:PointerEvent){
  const p=ensurePreview();
  p.textContent=SYMBOL_GLYPHS[kind]||'•';
  p.style.left=`${e.clientX}px`;p.style.top=`${e.clientY}px`;p.style.display='grid';
+ p.classList.toggle('wide',p.textContent.length>2);
  if(previewStage!==stage){previewStage?.classList.remove('drawingSymbolCursorActive');previewStage=stage;stage.classList.add('drawingSymbolCursorActive')}
 }
 function onPointerOut(e:PointerEvent){
