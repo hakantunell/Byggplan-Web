@@ -8,7 +8,7 @@ import {VK4410_TECHNICAL_CONSULTATION} from './governingDocumentTechnicalConsult
 type DocumentSummary={id:string;document_type:string;title:string;reference:string;source_filename:string;item_count:number};
 type Props={projectId:string;onOpenMapping:()=>void};
 type AnalysisItem={code?:string;description:string;sectionCode?:string;sectionTitle?:string;itemType?:string;responsibleRole?:string;evidenceRequired?:string;handlingStatus?:string;sourceNote?:string};
-type GenericAnalysisResponse={createdItems?:number;error?:string;documentSummary?:string;analyzer?:string;model?:string};
+type GenericAnalysisResponse={createdItems?:number;error?:string;documentSummary?:string;analyzer?:string;model?:string;status?:string;stage?:string;analysisRunId?:string;result?:GenericAnalysisResponse};
 
 function reviewedPlanItems(points:readonly any[]):AnalysisItem[]{
   return points.map(point=>({
@@ -33,6 +33,8 @@ function reviewedFallback(document:DocumentSummary):AnalysisItem[]|null{
   return null;
 }
 
+function wait(ms:number){return new Promise(resolve=>window.setTimeout(resolve,ms))}
+
 export function GoverningDocumentAnalysisAction({projectId,onOpenMapping}:Props){
   const[target,setTarget]=useState<Element|null>(null);const[documents,setDocuments]=useState<DocumentSummary[]>([]);const[selectedTitle,setSelectedTitle]=useState('');const[busy,setBusy]=useState(false);const[message,setMessage]=useState('');
   useEffect(()=>{void loadDocuments()},[projectId]);
@@ -45,10 +47,31 @@ export function GoverningDocumentAnalysisAction({projectId,onOpenMapping}:Props)
     const d=await r.json().catch(()=>({})) as GenericAnalysisResponse;if(!r.ok)throw new Error(d.error||'Fallback-analysen misslyckades.');return Number(d.createdItems||0)
   }
 
+  async function waitForQueuedAnalysis(selectedDocument:DocumentSummary){
+    const started=Date.now();
+    while(Date.now()-started<12*60*1000){
+      await wait(2000);
+      const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selectedDocument.id)}/analysis-status`,{cache:'no-store'});
+      const d=await r.json().catch(()=>({})) as GenericAnalysisResponse;
+      if(!r.ok)throw new Error(d.error||'Kunde inte läsa analysstatus.');
+      if(d.status==='completed'){
+        const result=d.result||{};
+        return {created:Number(result.createdItems||0),fallback:false,summary:result.documentSummary||''};
+      }
+      if(d.status==='failed')throw new Error(d.error||d.result?.error||'Analysen misslyckades i bakgrundskön.');
+      if(d.status==='processing')setMessage('Dokumentet analyseras i bakgrunden…');
+      else setMessage('Dokumentet väntar på analys…');
+    }
+    throw new Error('Analysen tar längre tid än väntat. Den fortsätter i bakgrunden; prova att öppna dokumentet igen om en stund.');
+  }
+
   async function runGenericAnalysis(selectedDocument:DocumentSummary){
     const r=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selectedDocument.id)}/analyze-generic`,{method:'POST'});
     const d=await r.json().catch(()=>({})) as GenericAnalysisResponse;
-    if(r.ok)return {created:Number(d.createdItems||0),fallback:false,summary:d.documentSummary||''};
+    if(r.ok){
+      if(d.status==='queued'||d.status==='processing')return waitForQueuedAnalysis(selectedDocument);
+      return {created:Number(d.createdItems||0),fallback:false,summary:d.documentSummary||''};
+    }
     if(r.status===503){
       const fallback=reviewedFallback(selectedDocument);
       if(fallback?.length){const created=await postReviewedFallback(selectedDocument,fallback);return {created,fallback:true,summary:''}}
@@ -57,7 +80,7 @@ export function GoverningDocumentAnalysisAction({projectId,onOpenMapping}:Props)
   }
 
   async function analyze(){
-    if(!selected)return;setBusy(true);setMessage('Läser och analyserar dokumentet…');
+    if(!selected)return;setBusy(true);setMessage('Startar dokumentanalysen…');
     try{
       const result=await runGenericAnalysis(selected);
       setMessage(result.fallback?`${result.created} styrande poster hittades med den verifierade reservanalysen.`:result.created?`${result.created} styrande poster hittades.`:'Analysen hittade inga tydligt styrande poster i dokumentet.');
@@ -68,7 +91,7 @@ export function GoverningDocumentAnalysisAction({projectId,onOpenMapping}:Props)
   async function reanalyze(){
     if(!selected)return;
     if(!window.confirm('Analysera om dokumentet? Befintliga styrposter och deras aktivitetskopplingar för just detta dokument tas bort och byggs upp på nytt från originalfilen.'))return;
-    setBusy(true);setMessage('Nollställer och analyserar om originaldokumentet…');
+    setBusy(true);setMessage('Nollställer och startar om analysen…');
     try{
       const reset=await fetch(`/api/studio/governing-documents/${encodeURIComponent(selected.id)}/analysis`,{method:'DELETE'});
       const resetData=await reset.json().catch(()=>({})) as {error?:string};if(!reset.ok)throw new Error(resetData.error||'Kunde inte nollställa analysen.');
