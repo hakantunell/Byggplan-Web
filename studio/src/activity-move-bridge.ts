@@ -27,39 +27,52 @@ export function installActivityMoveBridge(){
   return loading;
  }
 
- function label(row:HTMLElement|null){return NORMALIZE(row?.querySelector<HTMLElement>('.projectTreeLabel')?.textContent)}
- function rowDepth(row:HTMLElement){return Math.round((parseInt(row.style.paddingLeft||'0',10)-10)/16)}
+ function legacyLabel(row:HTMLElement|null){return NORMALIZE(row?.querySelector<HTMLElement>('.projectTreeLabel')?.textContent)}
+ function embeddedLabel(row:HTMLElement|null){return NORMALIZE(row?.querySelector<HTMLElement>('.projectsHierarchySelect > span:nth-child(2)')?.textContent)}
+ function legacyDepth(row:HTMLElement){return Math.round((parseInt(row.style.paddingLeft||'0',10)-10)/16)}
+ function embeddedDepth(row:HTMLElement){return Math.round(parseInt(row.style.paddingLeft||'0',10)/13)}
 
- function resolveTask(row:HTMLElement){
+ function resolveLegacyTask(row:HTMLElement){
   const taskWrapper=row.parentElement;
   const sectionWrapper=taskWrapper?.parentElement;
   const areaWrapper=sectionWrapper?.parentElement;
-  const taskTitle=label(row);
-  const sectionTitle=label(sectionWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
-  const areaTitle=label(areaWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
+  const taskTitle=legacyLabel(row);
+  const sectionTitle=legacyLabel(sectionWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
+  const areaTitle=legacyLabel(areaWrapper?.querySelector<HTMLElement>(':scope > .projectTreeRow')||null);
   return tasks.find(task=>NORMALIZE(task.title)===taskTitle&&NORMALIZE(task.workSection)===sectionTitle&&NORMALIZE(task.workArea)===areaTitle)||null;
  }
 
- function bindRows(){
-  const workspace=document.querySelector<HTMLElement>('.projectWorkspace');
-  const editMode=Boolean(workspace?.classList.contains('editMode'));
-  const rows=Array.from(document.querySelectorAll<HTMLElement>('.projectWorkspace .projectTreeRow'));
+ function resolveEmbeddedTask(row:HTMLElement){
+  const taskWrapper=row.parentElement;
+  const sectionWrapper=taskWrapper?.parentElement;
+  const areaWrapper=sectionWrapper?.parentElement;
+  const taskTitle=embeddedLabel(row);
+  const sectionTitle=embeddedLabel(sectionWrapper?.querySelector<HTMLElement>(':scope > .projectsHierarchyRow')||null);
+  const areaTitle=embeddedLabel(areaWrapper?.querySelector<HTMLElement>(':scope > .projectsHierarchyRow')||null);
+  return tasks.find(task=>NORMALIZE(task.title)===taskTitle&&NORMALIZE(task.workSection)===sectionTitle&&NORMALIZE(task.workArea)===areaTitle)||null;
+ }
+
+ function clearRows(rows:HTMLElement[]){
   for(const row of rows){
    row.draggable=false;
    row.classList.remove('activityTreeDraggable','activityTreeDropTarget','activityTreeDropHover','activityTreeDragging');
    delete row.dataset.activityId;delete row.dataset.taskId;
   }
-  if(!editMode||!tasks.length)return;
+ }
 
-  for(const row of rows.filter(item=>rowDepth(item)===3)){
-   const task=resolveTask(row);if(!task)continue;
+ function bindLegacyRows(editMode:boolean){
+  const rows=Array.from(document.querySelectorAll<HTMLElement>('.projectWorkspace .projectTreeRow'));
+  clearRows(rows);
+  if(!editMode||!tasks.length)return;
+  for(const row of rows.filter(item=>legacyDepth(item)===3)){
+   const task=resolveLegacyTask(row);if(!task)continue;
    row.dataset.taskId=task.id;row.classList.add('activityTreeDropTarget');
   }
-  for(const taskRow of rows.filter(item=>rowDepth(item)===3)){
+  for(const taskRow of rows.filter(item=>legacyDepth(item)===3)){
    const taskId=taskRow.dataset.taskId;if(!taskId)continue;
    const task=tasks.find(item=>item.id===taskId);if(!task)continue;
    const wrapper=taskRow.parentElement;if(!wrapper)continue;
-   const activityRows=Array.from(wrapper.children).filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.classList.contains('projectTreeRow')&&rowDepth(node)===4);
+   const activityRows=Array.from(wrapper.children).filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.classList.contains('projectTreeRow')&&legacyDepth(node)===4);
    activityRows.forEach((row,index)=>{
     const activity=task.activities[index];if(!activity)return;
     row.dataset.activityId=activity.id;row.dataset.taskId=task.id;row.draggable=true;row.classList.add('activityTreeDraggable');row.title='Dra aktiviteten till ett annat moment';
@@ -67,9 +80,30 @@ export function installActivityMoveBridge(){
   }
  }
 
- async function sync(){
-  await ensureTasks();bindRows();
+ function bindEmbeddedRows(editMode:boolean){
+  const rows=Array.from(document.querySelectorAll<HTMLElement>('.projectsTree .projectsHierarchyRow'));
+  clearRows(rows);
+  if(!editMode||!tasks.length)return;
+  for(const row of rows.filter(item=>embeddedDepth(item)===3)){
+   const task=resolveEmbeddedTask(row);if(!task)continue;
+   row.dataset.taskId=task.id;row.classList.add('activityTreeDropTarget');
+   const wrapper=row.parentElement;if(!wrapper)continue;
+   const activityRows=Array.from(wrapper.children).filter((node):node is HTMLElement=>node instanceof HTMLElement&&node.classList.contains('projectsHierarchyRow')&&embeddedDepth(node)===4);
+   activityRows.forEach((activityRow,index)=>{
+    const activity=task.activities[index];if(!activity)return;
+    activityRow.dataset.activityId=activity.id;activityRow.dataset.taskId=task.id;activityRow.draggable=true;activityRow.classList.add('activityTreeDraggable');activityRow.title='Dra aktiviteten till ett annat moment';
+   });
+  }
  }
+
+ function bindRows(){
+  const legacyEditMode=Boolean(document.querySelector('.projectWorkspace.editMode'));
+  const embeddedEditMode=Boolean(document.querySelector('.embeddedProjectMain.embeddedEditMode'));
+  bindLegacyRows(legacyEditMode);
+  bindEmbeddedRows(embeddedEditMode);
+ }
+
+ async function sync(){await ensureTasks();bindRows()}
  function scheduleSync(){window.clearTimeout(syncTimer);syncTimer=window.setTimeout(()=>void sync(),40)}
 
  document.addEventListener('dragstart',event=>{
@@ -104,17 +138,12 @@ export function installActivityMoveBridge(){
     const data=await response.json().catch(()=>({})) as {error?:string};
     if(!response.ok)throw new Error(data.error||'Aktiviteten kunde inte flyttas.');
     showMessage('Aktiviteten flyttad');
-
-    // Invalidate the drag helper's cache. React's project tree is then refreshed
-    // through its existing editor save/reload path instead of reloading the page.
     tasks=[];loadedProjectId='';
     const movedRow=document.querySelector<HTMLElement>(`.activityTreeDraggable[data-activity-id="${CSS.escape(move.activityId)}"]`);
     movedRow?.click();
     window.setTimeout(()=>{
      const save=Array.from(document.querySelectorAll<HTMLButtonElement>('.projectMain .editActions button.primary')).find(button=>NORMALIZE(button.textContent)==='Spara ändringar');
      if(save){save.click();return}
-     // Fallback: leave the page intact even if the editor could not be selected.
-     // The server-side move is already complete and a manual refresh will show it.
      scheduleSync();
     },60);
    }catch(error){showMessage(error instanceof Error?error.message:'Aktiviteten kunde inte flyttas.',true)}
