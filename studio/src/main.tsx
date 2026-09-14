@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import './same-origin-api';
 import './mapping-dialog-clarity';
 import './graph-wheel-guard';
+import { initializeGraphStateSync } from './graph-state-sync';
 import { installExecutionContextBridge } from './execution-context-bridge';
 import { installProjectUtilityRail } from './project-utility-rail';
 import { installGraphicalPlanPdfExport } from './graphical-plan-pdf';
@@ -81,4 +82,9 @@ installDrawingPaletteSync();
 installDrawingPaletteBridge();
 installDrawingPaletteWorkflowUx();
 installDrawingWorkspaceUx();
-ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioShell/><ProjectHierarchyIndicators/><ProjectInformationMount/><SystemBackupSettingsMount/><ProjectExecutionResetSettingsMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
+
+function renderStudio(){
+  ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthGate><StudioShell/><ProjectHierarchyIndicators/><ProjectInformationMount/><SystemBackupSettingsMount/><ProjectExecutionResetSettingsMount/><MasterV2UpgradeAction/></AuthGate></React.StrictMode>);
+}
+
+void initializeGraphStateSync().finally(renderStudio);
