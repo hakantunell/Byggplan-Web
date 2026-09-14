@@ -5,3 +5,4 @@
 .projectWorkspace>.rail button{padding:6px 3px;gap:3px;font-size:19px;line-height:1}
 .projectWorkspace>.rail button>span:last-child{font-size:10px;line-height:1.15;max-width:72px;white-space:normal;text-align:center}
 @media(max-width:1050px){.projectWorkspace{grid-template-columns:84px 285px minmax(0,1fr)}}
+.embeddedProjectToolbar{max-width:1180px;margin:0 auto 14px;display:flex;align-items:center;justify-content:flex-end;gap:12px}.embeddedProjectToolbar .workspaceMode{margin-left:0}.embeddedProjectToolbar .saveMessage{margin-left:0;color:#53636d;font-size:13px}.embeddedEditMode{background:#fff9ef}
