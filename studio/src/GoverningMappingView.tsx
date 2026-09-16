@@ -85,12 +85,19 @@ export function GoverningMappingView({ projectId }: Props) {
   const [bulkBusy,setBulkBusy]=useState(false);
   const [message, setMessage] = useState('');
   const [editorItem,setEditorItem]=useState<MappingItem|null>(null);
+  const [infoItem,setInfoItem]=useState<MappingItem|null>(null);
   const [placementAreas,setPlacementAreas]=useState<PlacementArea[]>([]);
   const [creationForm,setCreationForm]=useState<CreationForm|null>(null);
   const [editorBusy,setEditorBusy]=useState(false);
   const [editorError,setEditorError]=useState('');
 
   useEffect(() => { void load(); }, [projectId]);
+  useEffect(()=>{
+    if(!infoItem)return;
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape')setInfoItem(null)};
+    window.addEventListener('keydown',onKeyDown);
+    return()=>window.removeEventListener('keydown',onKeyDown);
+  },[infoItem]);
 
   async function load() {
     if (!projectId) return;
@@ -265,6 +272,45 @@ export function GoverningMappingView({ projectId }: Props) {
     </div>;
   }
 
+  function renderItemInfoDialog(){
+    if(!infoItem||!data)return null;
+    const document=data.documents.find(entry=>entry.id===infoItem.governing_document_id);
+    const kinds=(infoItem.handling_kinds?.length?infoItem.handling_kinds:[infoItem.handling_kind||'work']).filter((value,index,array)=>array.indexOf(value)===index);
+    const section=[infoItem.section_code,infoItem.section_title].filter(Boolean).join(' · ');
+    return <div className="mappingItemInfoBackdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setInfoItem(null)}}>
+      <section className="mappingItemInfoDialog" role="dialog" aria-modal="true" aria-labelledby="mapping-item-info-title">
+        <header className="mappingItemInfoHeader">
+          <div><small>STYRANDE POST</small><h2 id="mapping-item-info-title">{infoItem.code ? `${infoItem.code} ` : ''}{infoItem.description}</h2>{section&&<p>{section}</p>}</div>
+          <button type="button" aria-label="Stäng information" title="Stäng" onClick={()=>setInfoItem(null)}>×</button>
+        </header>
+        <div className="mappingItemInfoBody">
+          <section className="mappingItemInfoSource">
+            <h3>Information från styrdokumentet</h3>
+            <dl className="mappingItemInfoMeta">
+              <div><dt>Dokument</dt><dd>{document?.title||'Styrande dokument'}</dd></div>
+              {document?.issuer&&<div><dt>Utfärdare</dt><dd>{document.issuer}</dd></div>}
+              {document?.reference&&<div><dt>Referens</dt><dd>{document.reference}</dd></div>}
+              {section&&<div><dt>Avsnitt</dt><dd>{section}</dd></div>}
+            </dl>
+            <div className="mappingItemInfoText"><b>Post</b><p>{infoItem.description}</p></div>
+            {infoItem.source_note?.trim()?<div className="mappingItemInfoText"><b>Källnotering / kompletterande information</b><p>{infoItem.source_note}</p></div>:<p className="mappingItemInfoMuted">Ingen ytterligare källnotering finns lagrad för den här posten.</p>}
+          </section>
+          <section className="mappingItemInfoInterpretation">
+            <h3>ByggPlans tolkning</h3>
+            {infoItem.interpretation_note?.trim()?<p>{infoItem.interpretation_note}</p>:<p className="mappingItemInfoMuted">Ingen särskild tolkning är registrerad. Utgå i första hand från styrdokumentets post och sammanhang.</p>}
+            <div className="mappingItemInfoFacts">
+              <div><b>Hantering</b><span>{kinds.map(kind=>`${HANDLING_ICONS[kind]} ${HANDLING_LABELS[kind]}`).join(' · ')}</span></div>
+              {infoItem.timing_label&&<div><b>Tidpunkt / skede</b><span>{infoItem.timing_label}</span></div>}
+              {infoItem.responsible_role&&<div><b>Ansvarig roll</b><span>{infoItem.responsible_role}</span></div>}
+              {infoItem.evidence_type&&<div><b>Underlag / bevis</b><span>{infoItem.evidence_type}</span></div>}
+              {Number(infoItem.mapped_activity_count||0)>0&&<div><b>Kopplad till</b><span>{String(infoItem.mapped_activity_titles||'').split(' || ').filter(Boolean).join(', ')}</span></div>}
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>;
+  }
+
   if (!data) return <div className="mappingEmpty"><span>🧭</span><h2>Kartläggning</h2><p>{message || 'Läser projektets täckning…'}</p></div>;
   const selectedDocument = data.documents.find(document => document.id === selectedDocumentId);
 
@@ -310,7 +356,7 @@ export function GoverningMappingView({ projectId }: Props) {
         return <article className={`mappingItem ${stateClass}`} key={item.id}>
           <div className="mappingState" title={stateTitle}>{handledCondition?'◆':exception?'—':mapped?'✓':'!'}</div>
           <div className="mappingItemBody">
-            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind">{kinds.map(kind=><span key={kind} style={{marginRight:10}}>{HANDLING_ICONS[kind]} {HANDLING_LABELS[kind]}</span>)}</div><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3>{item.timing_label&&<small><b>⏱ {item.timing_label}</b></small>}{item.interpretation_note&&<small>{item.interpretation_note}</small>}</div>
+            <div className="mappingItemTitle"><small>{[item.section_code,item.section_title].filter(Boolean).join(' · ')}</small><div className="mappingHandlingKind">{kinds.map(kind=><span key={kind} style={{marginRight:10}}>{HANDLING_ICONS[kind]} {HANDLING_LABELS[kind]}</span>)}</div><div className="mappingItemHeadingRow"><h3>{item.code ? `${item.code} ` : ''}{item.description}</h3><button type="button" className="mappingItemInfoButton" aria-label={`Visa information om ${item.code||item.description}`} title="Visa vad posten betyder" onClick={()=>setInfoItem(item)}>i</button></div>{item.timing_label&&<small><b>⏱ {item.timing_label}</b></small>}</div>
             {handledCondition ? <div className="mappedActivities"><b>Projektvillkor</b><span>Registrerat som ett bestående villkor för projektet. Ingen separat aktivitet krävs enbart för att bära villkoret.</span></div>
               : exception ? <div className="mappedActivities"><b>Undantag</b><span>{EXCEPTION_LABELS[item.handling_status]}</span></div>
               : mapped ? <><div className="mappedActivities"><b>Kopplad till</b><span>{String(item.mapped_activity_titles || '').split(' || ').filter(Boolean).join(', ')}</span></div>{renderSuggestions(item,suggestions,true)}</>
@@ -328,5 +374,6 @@ export function GoverningMappingView({ projectId }: Props) {
     </div>
     {message && <div className="mappingMessage">{message}</div>}
     {renderCreationEditor()}
+    {renderItemInfoDialog()}
   </div>;
 }
