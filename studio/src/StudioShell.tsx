@@ -13,7 +13,7 @@ import { ControlPlanReviewView } from './ControlPlanReviewView';
 import { GraphicalPlanView } from './GraphicalPlanView';
 import { ProjectBackupView } from './ProjectBackupView';
 import { ProjectDocumentsWorkspace } from './ProjectDocumentsWorkspace';
-import { SystemWorkspacesView } from './SystemWorkspacesView';
+import { SystemAdministrationView as SystemWorkspacesView } from './SystemAdministrationView';
 import { useAuth } from './AuthGate';
 
 type StudioView='projects'|'new-project'|'project-information'|'project-reports'|'project-settings'|'project-documents'|'governing-documents'|'governing-mapping'|'users'|'control-plan'|'graphical-plan'|'backup'|'system-workspaces';
